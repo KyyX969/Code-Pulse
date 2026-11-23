@@ -252,7 +252,8 @@ export type RtcSignalType =
   | 'voice-mute'
   | 'voice-offer'
   | 'voice-answer'
-  | 'voice-ice';
+  | 'voice-ice'
+  | 'voice-audio-chunk';
 
 export type RealtimeServerMessage =
   | { type: 'connected'; clientId: string }

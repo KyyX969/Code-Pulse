@@ -14,14 +14,35 @@ if (!process.env.VERCEL) {
 
 const parseIceServers = (): RTCIceServerConfig[] => {
   const servers: RTCIceServerConfig[] = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    {
+      urls: [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+        'stun:stun3.l.google.com:19302',
+        'stun:global.relay.metered.ca:80',
+      ],
+    },
   ];
 
-  if (process.env.VITE_TURN_URL) {
+  const turnUrl = (process.env.TURN_URL || process.env.VITE_TURN_URL || '').trim();
+  const turnUsername = (process.env.TURN_USERNAME || process.env.VITE_TURN_USERNAME || '').trim();
+  const turnCredential = (
+    process.env.TURN_CREDENTIAL ||
+    process.env.VITE_TURN_CREDENTIAL ||
+    ''
+  ).trim();
+
+  if (turnUrl) {
     servers.push({
-      urls: process.env.VITE_TURN_URL,
-      username: process.env.VITE_TURN_USERNAME || undefined,
-      credential: process.env.VITE_TURN_CREDENTIAL || undefined,
+      urls: turnUrl.includes(',')
+        ? turnUrl
+            .split(',')
+            .map((u) => u.trim())
+            .filter(Boolean)
+        : turnUrl,
+      username: turnUsername || undefined,
+      credential: turnCredential || undefined,
     });
   }
 

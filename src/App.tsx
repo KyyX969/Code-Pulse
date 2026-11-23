@@ -459,14 +459,15 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentUser, navScope, activeWorkspaceId]);
 
-  // Workspace realtime WebSocket sync
+  // Workspace realtime WebSocket & Supabase Broadcast sync
+  const currentUserId = currentUser?.id ?? null;
   useEffect(() => {
-    if (!currentUser || !activeWorkspaceId) {
+    if (!currentUserId || !activeWorkspaceId) {
       realtimeClient.disconnect();
       return;
     }
 
-    realtimeClient.connect(activeWorkspaceId, currentUser.id);
+    realtimeClient.connect(activeWorkspaceId, currentUserId);
     const unsubscribe = realtimeClient.subscribe((msg: RealtimeServerMessage) => {
       if (msg.type === 'task:created' && msg.workspaceId === activeWorkspaceId) {
         setTasks((prev) =>
@@ -506,7 +507,7 @@ export function App() {
     return () => {
       unsubscribe();
     };
-  }, [currentUser, activeWorkspaceId, loadInvitations]);
+  }, [currentUserId, activeWorkspaceId, loadInvitations]);
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
 

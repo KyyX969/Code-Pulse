@@ -719,25 +719,33 @@ export function LiveMonitorPanel({
         </div>
       </div>
 
-      {/* Team Voice Coms Bar (WebRTC P2P Audio Mesh) */}
+      {/* Team Voice Coms Bar (WebRTC P2P + Auto Relay Fallback) */}
       <TeamVoiceComsBar
         currentUser={currentUser}
+        voiceMode={voice.voiceMode}
         voiceJoined={voice.voiceJoined}
         joiningVoice={voice.joiningVoice}
         micMuted={voice.micMuted}
         deafened={voice.deafened}
+        micTestActive={voice.micTestActive}
         localSpeaking={voice.localSpeaking}
+        localLevel={voice.localLevel}
+        audioBlocked={voice.audioBlocked}
         audioDevices={voice.audioDevices}
         selectedDeviceId={voice.selectedDeviceId}
         remoteParticipants={voice.remoteParticipants}
         remoteAudioStreams={voice.remoteAudioStreams}
         mutedPeerIds={voice.mutedPeerIds}
-        onJoinVoice={() => void voice.joinVoice()}
+        onJoinVoice={(mode) => void voice.joinVoice(mode)}
         onLeaveVoice={() => voice.leaveVoice()}
         onToggleMute={voice.toggleMute}
         onToggleDeafen={voice.toggleDeafen}
+        onToggleMicTest={voice.toggleMicTest}
         onTogglePeerMute={voice.togglePeerMute}
         onSwitchMicDevice={(id) => void voice.switchMicDevice(id)}
+        onReconnectPeer={voice.reconnectPeer}
+        onUnlockAudio={voice.unlockAudio}
+        onAudioBlocked={voice.markAudioBlocked}
       />
 
       {/* Live Video Grid */}

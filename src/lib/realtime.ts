@@ -18,8 +18,17 @@ class RealtimeClient {
   private wsEverOpened = false;
   private wsFailedAttempts = 0;
   private supabaseConnected = false;
+  private supabaseWorkspaceId: string | null = null;
   private supabase: SupabaseClient | null = null;
   private supabaseChannel: RealtimeChannel | null = null;
+  private pendingSupabaseSignals: Array<{
+    type: 'rtc:signal';
+    workspaceId: string;
+    fromUserId: string;
+    toUserId: string;
+    signalType: RtcSignalType;
+    payload: unknown;
+  }> = [];
 
   constructor() {
     const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -121,13 +130,28 @@ class RealtimeClient {
 
   private connectSupabaseChannel(workspaceId: string): void {
     if (!this.supabase) return;
+    // Avoid tearing down an already active/subscribing channel for the same workspace
+    if (this.supabaseChannel && this.supabaseWorkspaceId === workspaceId) {
+      return;
+    }
     if (this.supabaseChannel) {
-      this.supabase.removeChannel(this.supabaseChannel);
+      void this.supabase.removeChannel(this.supabaseChannel);
       this.supabaseChannel = null;
+      this.supabaseConnected = false;
     }
 
-    this.supabaseChannel = this.supabase
-      .channel(`codepulse-rtc:${workspaceId}`)
+    this.supabaseWorkspaceId = workspaceId;
+    this.pendingSupabaseSignals = [];
+
+    const channel = this.supabase
+      .channel(`codepulse-rtc:${workspaceId}`, {
+        config: {
+          broadcast: {
+            self: false,
+            ack: false,
+          },
+        },
+      })
       .on('broadcast', { event: 'rtc:signal' }, ({ payload }) => {
         if (!payload) return;
         const msg = payload as RealtimeServerMessage;
@@ -142,16 +166,33 @@ class RealtimeClient {
         }
       })
       .subscribe((channelStatus) => {
+        if (this.supabaseChannel !== channel) return;
         if (channelStatus === 'SUBSCRIBED') {
           this.supabaseConnected = true;
           this.setStatus('connected');
-        } else if (channelStatus === 'CLOSED' || channelStatus === 'CHANNEL_ERROR') {
+          const queued = this.pendingSupabaseSignals.splice(0, this.pendingSupabaseSignals.length);
+          for (const packet of queued) {
+            if (packet.workspaceId === workspaceId) {
+              void channel.send({
+                type: 'broadcast',
+                event: 'rtc:signal',
+                payload: packet,
+              });
+            }
+          }
+        } else if (
+          channelStatus === 'CLOSED' ||
+          channelStatus === 'CHANNEL_ERROR' ||
+          channelStatus === 'TIMED_OUT'
+        ) {
           this.supabaseConnected = false;
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.setStatus('disconnected');
           }
         }
       });
+
+    this.supabaseChannel = channel;
   }
 
   sendRtcSignal(params: {
@@ -171,11 +212,19 @@ class RealtimeClient {
     }
 
     if (this.supabaseChannel) {
-      void this.supabaseChannel.send({
-        type: 'broadcast',
-        event: 'rtc:signal',
-        payload: packet,
-      });
+      if (this.supabaseConnected) {
+        void this.supabaseChannel.send({
+          type: 'broadcast',
+          event: 'rtc:signal',
+          payload: packet,
+        });
+      } else if (params.signalType !== 'voice-audio-chunk') {
+        // Queue control/SDP/ICE signals until channel finishes SUBSCRIBED handshake
+        this.pendingSupabaseSignals.push(packet);
+        if (this.pendingSupabaseSignals.length > 40) {
+          this.pendingSupabaseSignals.shift();
+        }
+      }
     }
   }
 
@@ -197,10 +246,12 @@ class RealtimeClient {
       this.ws = null;
     }
     if (this.supabase && this.supabaseChannel) {
-      this.supabase.removeChannel(this.supabaseChannel);
+      void this.supabase.removeChannel(this.supabaseChannel);
       this.supabaseChannel = null;
     }
     this.supabaseConnected = false;
+    this.supabaseWorkspaceId = null;
+    this.pendingSupabaseSignals = [];
     this.wsFailedAttempts = 0;
     this.setStatus('disconnected');
   }
