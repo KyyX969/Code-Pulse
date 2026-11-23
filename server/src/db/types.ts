@@ -11,6 +11,7 @@ import type {
   Workspace,
   WorkspaceInvitation,
 } from '../../../shared/types.js';
+import { decryptToken } from '../utils/crypto.js';
 
 export interface StoredUser {
   id: string;
@@ -149,6 +150,17 @@ export interface DataStore {
   endLiveSession(workspaceId: string, userId: string): Promise<LiveSession[]>;
 }
 
+function maskEncryptedToken(encrypted: string | null): string | null {
+  if (!encrypted) return null;
+  try {
+    const raw = decryptToken(encrypted).trim();
+    if (raw.length <= 10) return '••••••••••••••••';
+    return `${raw.slice(0, 4)}${'•'.repeat(12)}${raw.slice(-4)}`;
+  } catch {
+    return '••••••••••••••••';
+  }
+}
+
 export function toPublicUser(user: StoredUser): PublicUser {
   return {
     id: user.id,
@@ -161,6 +173,7 @@ export function toPublicUser(user: StoredUser): PublicUser {
     githubConnected: Boolean(user.githubTokenEncrypted),
     vercelConnected: Boolean(user.vercelTokenEncrypted),
     vercelUsername: user.vercelUsername,
+    vercelTokenPreview: maskEncryptedToken(user.vercelTokenEncrypted),
   };
 }
 

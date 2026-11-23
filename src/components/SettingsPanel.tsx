@@ -63,6 +63,7 @@ export function SettingsPanel({
   const [savingRepo, setSavingRepo] = useState(false);
 
   const [vercelTokenInput, setVercelTokenInput] = useState('');
+  const [editingVercelToken, setEditingVercelToken] = useState(false);
   const [savingVercel, setSavingVercel] = useState(false);
 
   useEffect(() => {
@@ -139,6 +140,7 @@ export function SettingsPanel({
       const { user } = await api.linkVercelToken(vercelTokenInput.trim());
       onUserUpdated(user);
       setVercelTokenInput('');
+      setEditingVercelToken(false);
       onToast(
         'success',
         L(
@@ -497,33 +499,71 @@ export function SettingsPanel({
           </div>
 
           {currentUser.vercelConnected && (
-            <form onSubmit={handleLinkVercelToken} className="space-y-2">
-              <label className="block text-xs text-zinc-400">
-                {L('Perbarui Vercel Personal Access Token', 'Update Vercel Personal Access Token')}
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <KeyRound className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    value={vercelTokenInput}
-                    onChange={(e) => setVercelTokenInput(e.target.value)}
-                    placeholder={L(
-                      'Tempel Token Vercel baru untuk mengganti...',
-                      'Paste new Vercel token to replace...',
-                    )}
-                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-                  />
+            !editingVercelToken ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-400">
+                    {L('Vercel Personal Access Token Tersimpan', 'Saved Vercel Personal Access Token')}
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    {L('Aktif • Terenkripsi', 'Active • Encrypted')}
+                  </span>
                 </div>
-                <button
-                  type="submit"
-                  disabled={savingVercel || !vercelTokenInput.trim()}
-                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold cursor-pointer disabled:opacity-45"
-                >
-                  {L('Perbarui Token', 'Update Token')}
-                </button>
+                <div className="flex gap-2">
+                  <div className="flex-1 px-3 py-2 rounded-xl bg-zinc-950 border border-emerald-500/25 flex items-center gap-2 min-w-0">
+                    <KeyRound className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <code className="text-xs font-mono text-zinc-200 tracking-wider truncate">
+                      {currentUser.vercelTokenPreview || '••••••••••••••••••••'}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingVercelToken(true)}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold cursor-pointer shrink-0"
+                  >
+                    {L('Ganti Token', 'Change Token')}
+                  </button>
+                </div>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={handleLinkVercelToken} className="space-y-2">
+                <label className="block text-xs text-zinc-400">
+                  {L('Perbarui Vercel Personal Access Token', 'Update Vercel Personal Access Token')}
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <KeyRound className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      value={vercelTokenInput}
+                      onChange={(e) => setVercelTokenInput(e.target.value)}
+                      placeholder={L(
+                        'Tempel Token Vercel baru untuk mengganti...',
+                        'Paste new Vercel token to replace...',
+                      )}
+                      className="w-full pl-8 pr-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingVercel || !vercelTokenInput.trim()}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer disabled:opacity-45"
+                  >
+                    {savingVercel ? L('Menyimpan...', 'Saving...') : L('Simpan', 'Save')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingVercelToken(false);
+                      setVercelTokenInput('');
+                    }}
+                    className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 hover:text-white text-xs cursor-pointer"
+                  >
+                    {L('Batal', 'Cancel')}
+                  </button>
+                </div>
+              </form>
+            )
           )}
 
           <div className="pt-2 border-t border-white/10">

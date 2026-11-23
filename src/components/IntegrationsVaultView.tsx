@@ -81,6 +81,7 @@ export function IntegrationsVaultView({
   const { L, locale } = useLanguage();
   const [vercelToken, setVercelToken] = useState('');
   const [showToken, setShowToken] = useState(false);
+  const [rotatingToken, setRotatingToken] = useState(false);
   const [savingVercel, setSavingVercel] = useState(false);
   const [vercelProjects, setVercelProjects] = useState<VercelProjectItem[]>([]);
   const [vercelProjectsLoaded, setVercelProjectsLoaded] = useState(!currentUser.vercelConnected);
@@ -154,6 +155,7 @@ export function IntegrationsVaultView({
       onUserUpdated(user);
       setVercelToken('');
       setShowToken(false);
+      setRotatingToken(false);
       setGuideExpanded(false);
       const vRes = await api.listVercelProjects().catch(() => ({ projects: [] }));
       setVercelProjects(vRes.projects);
@@ -534,59 +536,103 @@ export function IntegrationsVaultView({
             </div>
           )}
 
-          {/* Token Input / Rotation Form */}
-          <form onSubmit={handleLinkVercelToken} className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-zinc-300">
-                {currentUser.vercelConnected
-                  ? L('Rotasi Personal Access Token Vercel', 'Rotate Vercel Personal Access Token')
-                  : L('Personal Access Token Vercel', 'Vercel Personal Access Token')}
-              </label>
-              <span className="text-[10px] font-mono text-zinc-500">
-                {L('Dienkripsi sebelum disimpan', 'Encrypted before save')}
-              </span>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <KeyRound className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showToken ? 'text' : 'password'}
-                  value={vercelToken}
-                  onChange={(e) => setVercelToken(e.target.value)}
-                  placeholder={
-                    currentUser.vercelConnected
-                      ? L('Tempel token baru untuk rotasi...', 'Paste a new token to rotate...')
-                      : L('Tempel token Vercel Anda...', 'Paste your Vercel token...')
-                  }
-                  className="w-full pl-8 pr-9 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-                />
+          {/* Saved Masked Token Display or Input / Rotation Form */}
+          {currentUser.vercelConnected && !rotatingToken ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-300">
+                  {L('Personal Access Token Vercel Tersimpan', 'Saved Vercel Personal Access Token')}
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400">
+                  {L('Tersimpan • AES-256-GCM', 'Stored • AES-256-GCM')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-emerald-500/25 flex items-center justify-between gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <KeyRound className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <code className="text-xs font-mono text-zinc-200 tracking-wider truncate">
+                      {currentUser.vercelTokenPreview || '••••••••••••••••••••'}
+                    </code>
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/12 text-emerald-300 shrink-0">
+                    {L('Aktif', 'Active')}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowToken((prev) => !prev)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
-                  title={
-                    showToken
-                      ? L('Sembunyikan token', 'Hide token')
-                      : L('Tampilkan token', 'Show token')
-                  }
+                  onClick={() => setRotatingToken(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/12 text-zinc-200 hover:text-white text-xs font-semibold transition cursor-pointer shrink-0"
                 >
-                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {L('Ganti Token', 'Rotate Token')}
                 </button>
               </div>
-              <button
-                type="submit"
-                disabled={savingVercel || !vercelToken.trim()}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition cursor-pointer disabled:opacity-45 shrink-0"
-              >
-                {savingVercel
-                  ? L('Memverifikasi...', 'Verifying...')
-                  : currentUser.vercelConnected
-                    ? L('Rotasi Token', 'Rotate Token')
-                    : L('Simpan Token', 'Save Token')}
-              </button>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleLinkVercelToken} className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-300">
+                  {currentUser.vercelConnected
+                    ? L('Ganti Personal Access Token Vercel', 'Replace Vercel Personal Access Token')
+                    : L('Personal Access Token Vercel', 'Vercel Personal Access Token')}
+                </label>
+                <span className="text-[10px] font-mono text-zinc-500">
+                  {L('Dienkripsi sebelum disimpan', 'Encrypted before save')}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <KeyRound className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showToken ? 'text' : 'password'}
+                    value={vercelToken}
+                    onChange={(e) => setVercelToken(e.target.value)}
+                    placeholder={
+                      currentUser.vercelConnected
+                        ? L('Tempel token baru untuk mengganti...', 'Paste a new token to replace...')
+                        : L('Tempel token Vercel Anda...', 'Paste your Vercel token...')
+                    }
+                    className="w-full pl-8 pr-9 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                    title={
+                      showToken
+                        ? L('Sembunyikan token', 'Hide token')
+                        : L('Tampilkan token', 'Show token')
+                    }
+                  >
+                    {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingVercel || !vercelToken.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition cursor-pointer disabled:opacity-45 shrink-0"
+                >
+                  {savingVercel
+                    ? L('Memverifikasi...', 'Verifying...')
+                    : L('Simpan Token', 'Save Token')}
+                </button>
+                {currentUser.vercelConnected && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRotatingToken(false);
+                      setVercelToken('');
+                      setShowToken(false);
+                    }}
+                    className="px-3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 hover:text-white text-xs font-medium transition cursor-pointer shrink-0"
+                  >
+                    {L('Batal', 'Cancel')}
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
 
           {/* Linked Cloud Projects */}
           {currentUser.vercelConnected && (

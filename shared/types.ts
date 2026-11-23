@@ -24,6 +24,7 @@ export interface PublicUser {
   githubConnected: boolean;
   vercelConnected: boolean;
   vercelUsername: string | null;
+  vercelTokenPreview?: string | null;
 }
 
 export interface WorkspaceMember {
