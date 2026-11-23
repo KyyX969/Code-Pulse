@@ -21,10 +21,9 @@ import {
   Plus,
   Rocket,
   Search,
-  Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Unlock,
-  UserPlus,
   X,
 } from 'lucide-react';
 import { getWorkspaceMemberRole } from '../shared/permissions.ts';
@@ -52,7 +51,10 @@ import { LanguageToggle } from './components/LanguageToggle.tsx';
 import { LiveMonitorPanel } from './components/LiveMonitorPanel.tsx';
 import { CodePulseSplashLoader, WorkspaceViewSkeleton } from './components/LoadingUI.tsx';
 import { OnboardingView } from './components/OnboardingView.tsx';
-import { SettingsPanel } from './components/SettingsPanel.tsx';
+import {
+  ProjectManageModal,
+  type ProjectManageTab,
+} from './components/ProjectManageModal.tsx';
 import { TaskDiffModal } from './components/TaskDiffModal.tsx';
 import { api } from './lib/api.ts';
 import { readStoredLocale, useLanguage } from './lib/i18nContext.ts';
@@ -80,7 +82,6 @@ const TAB_LABELS: Record<PaletteTab, { id: string; en: string }> = {
   gatekeeper: { id: 'Gatekeeper & Webhook', en: 'Gatekeeper & Webhooks' },
   deployments: { id: 'Deployment Vercel', en: 'Vercel Deployments' },
   live: { id: 'Monitor Layar Langsung', en: 'Live Screen Monitor' },
-  settings: { id: 'Pengaturan Proyek', en: 'Project Settings' },
 };
 
 const AUTH_ERROR_MESSAGES: Record<string, { id: string; en: string }> = {
@@ -241,6 +242,7 @@ export function App() {
   );
   const [activeTab, setActiveTab] = useState<PaletteTab>('board');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [projectManageTab, setProjectManageTab] = useState<ProjectManageTab | null>(null);
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -870,8 +872,19 @@ export function App() {
                   ))}
                 </select>
 
-                {activeWorkspace.githubOwner && activeWorkspace.githubRepo && (
-                  <div className="px-2.5 py-1.5 rounded-lg bg-zinc-950/70 border border-white/6 flex items-center justify-between gap-2 text-[11px] font-mono">
+                {activeWorkspace.githubOwner && activeWorkspace.githubRepo ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectManageTab('repo');
+                      setMobileMenuOpen(false);
+                    }}
+                    title={L(
+                      'Kelola repository, webhook & detail proyek',
+                      'Manage repository, webhook & project details',
+                    )}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950/70 hover:bg-zinc-900 border border-white/6 hover:border-white/15 flex items-center justify-between gap-2 text-[11px] font-mono transition cursor-pointer"
+                  >
                     <span className="inline-flex items-center gap-1.5 text-zinc-300 truncate">
                       <GitBranch className="w-3 h-3 text-cyan-400 shrink-0" />
                       <span className="truncate">
@@ -883,7 +896,26 @@ export function App() {
                     ) : (
                       <Unlock className="w-3 h-3 text-amber-400 shrink-0" />
                     )}
-                  </div>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectManageTab('repo');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950/50 hover:bg-zinc-900 border border-dashed border-white/15 hover:border-indigo-400/40 flex items-center justify-between gap-2 text-[11px] text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+                  >
+                    <span className="inline-flex items-center gap-1.5 truncate">
+                      <GitBranch className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span className="truncate">
+                        {activeProjectRole === 'leader'
+                          ? L('Hubungkan Repo GitHub', 'Connect GitHub Repo')
+                          : L('Info Repository', 'Repository Info')}
+                      </span>
+                    </span>
+                    <SlidersHorizontal className="w-3 h-3 text-zinc-500 shrink-0" />
+                  </button>
                 )}
               </div>
             </div>
@@ -930,12 +962,6 @@ export function App() {
               }
               badgeTone="cyan"
             />
-            <SidebarItem
-              active={navScope === 'project' && activeTab === 'settings'}
-              onClick={() => openProjectTab('settings')}
-              icon={<Settings className="w-4 h-4" />}
-              label={L('Pengaturan Proyek', 'Project Settings')}
-            />
           </nav>
 
             {/* Project Members (Contextual to Selected Project Only) */}
@@ -947,17 +973,26 @@ export function App() {
                     `Project Team (${activeWorkspace.members.length})`,
                   )}
                 </span>
-                {activeProjectRole === 'leader' && (
-                  <button
-                    type="button"
-                    onClick={() => openProjectTab('settings')}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-300 hover:text-indigo-200 cursor-pointer"
-                    title={L('Undang anggota tim ke proyek ini', 'Invite teammates to this project')}
-                  >
-                    <UserPlus className="w-3 h-3" />
-                    <span>{L('Undang', 'Invite')}</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectManageTab('team');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-300 hover:text-indigo-200 cursor-pointer"
+                  title={
+                    activeProjectRole === 'leader'
+                      ? L('Kelola anggota tim & undangan proyek', 'Manage team members & invitations')
+                      : L('Lihat tim & opsi proyek', 'View team & project options')
+                  }
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  <span>
+                    {activeProjectRole === 'leader'
+                      ? L('Kelola', 'Manage')
+                      : L('Detail', 'Details')}
+                  </span>
+                </button>
               </div>
               {activeWorkspace.members.map((m) => {
                 const isLive = liveUserIds.has(m.userId);
@@ -1316,6 +1351,7 @@ export function App() {
                       setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)))
                     }
                     onOpenTask={(t) => setSelectedTask(t)}
+                    onOpenRepoConnect={() => setProjectManageTab('repo')}
                     onToast={pushToast}
                   />
                 )}
@@ -1334,7 +1370,7 @@ export function App() {
                         prev.some((d) => d.id === dep.id) ? prev : [dep, ...prev],
                       )
                     }
-                    onOpenSettings={() => openProjectTab('settings')}
+                    onOpenSettings={() => openConsoleSection('vault')}
                     onToast={pushToast}
                   />
                 )}
@@ -1351,18 +1387,6 @@ export function App() {
                       ]
                     }
                     onSessionsChange={setLiveSessions}
-                    onToast={pushToast}
-                  />
-                )}
-
-                {activeTab === 'settings' && (
-                  <SettingsPanel
-                    workspace={activeWorkspace}
-                    currentUser={currentUser}
-                    capabilities={capabilities}
-                    onWorkspaceUpdated={handleWorkspaceUpdated}
-                    onWorkspaceDeleted={handleWorkspaceDeleted}
-                    onUserUpdated={setCurrentUser}
                     onToast={pushToast}
                   />
                 )}
@@ -1389,7 +1413,23 @@ export function App() {
           setActiveTab('board');
           setExternalCreateOpen(true);
         }}
+        onManageProject={activeWorkspace ? () => setProjectManageTab('team') : undefined}
       />
+
+      {/* Lightweight Project Management Modal (Team & Repo) */}
+      {projectManageTab && activeWorkspace && (
+        <ProjectManageModal
+          key={`${activeWorkspace.id}-${projectManageTab}`}
+          workspace={activeWorkspace}
+          currentUser={currentUser}
+          capabilities={capabilities}
+          initialTab={projectManageTab}
+          onClose={() => setProjectManageTab(null)}
+          onWorkspaceUpdated={handleWorkspaceUpdated}
+          onWorkspaceDeleted={handleWorkspaceDeleted}
+          onToast={pushToast}
+        />
+      )}
 
       {/* Task Detail & Gatekeeper Diff Modal */}
       {selectedTask && activeWorkspace && (

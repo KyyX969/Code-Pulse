@@ -9,6 +9,7 @@ import {
   GitCommit,
   GitMerge,
   GitPullRequest,
+  Link2,
   Lock,
   Play,
   ShieldAlert,
@@ -28,6 +29,7 @@ interface GatekeeperCenterProps {
   currentUser: PublicUser;
   onWorkspaceUpdated: (ws: Workspace) => void;
   onOpenTask: (task: Task) => void;
+  onOpenRepoConnect?: () => void;
   onToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -38,6 +40,7 @@ export function GatekeeperCenter({
   currentUser,
   onWorkspaceUpdated,
   onOpenTask,
+  onOpenRepoConnect,
   onToast,
 }: GatekeeperCenterProps) {
   const { L, locale } = useLanguage();
@@ -168,12 +171,24 @@ export function GatekeeperCenter({
             tone="emerald"
           />
         </div>
-        <div className="text-[11px] font-mono text-zinc-400">
-          {L('Push langsung ke', 'Direct pushes to')}{' '}
-          <code className="text-rose-300">{workspace.defaultBranch}</code>{' '}
-          {workspace.branchProtected
-            ? L('ditolak (403)', 'rejected (403)')
-            : L('tidak terproteksi', 'unprotected')}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-[11px] font-mono text-zinc-400">
+            {L('Push langsung ke', 'Direct pushes to')}{' '}
+            <code className="text-rose-300">{workspace.defaultBranch}</code>{' '}
+            {workspace.branchProtected
+              ? L('ditolak (403)', 'rejected (403)')
+              : L('tidak terproteksi', 'unprotected')}
+          </div>
+          {!workspace.githubRepo && isLeader && onOpenRepoConnect && (
+            <button
+              type="button"
+              onClick={onOpenRepoConnect}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold transition cursor-pointer"
+            >
+              <Link2 className="w-3 h-3" />
+              <span>{L('Hubungkan Repo GitHub', 'Connect GitHub Repo')}</span>
+            </button>
+          )}
         </div>
       </div>
 

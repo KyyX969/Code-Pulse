@@ -66,8 +66,6 @@ export function VercelTokenGuide({ compact = false, className = '' }: VercelToke
         <>
           {L('Buka tab ', "Open your project's ")}
           <strong className="text-zinc-200">{L('Deployment', 'Deployments')}</strong>{' '}
-          {L('atau ', 'or ')}
-          <strong className="text-zinc-200">{L('Pengaturan Proyek', 'Project Settings')}</strong>{' '}
           {L(
             'pada proyek Anda di CodePulse untuk mengatur framework, perintah build, direktori output, dan Environment Variables secara langsung—tanpa perlu impor manual di vercel.com.',
             'tab inside CodePulse to configure framework, build command, output directory, and env variables directly—no manual import on vercel.com required.',

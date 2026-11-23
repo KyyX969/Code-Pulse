@@ -2421,8 +2421,8 @@ export function GovernancePageView({ onNavigatePage, onOpenAuth }: PublicPagePro
               icon: <UserPlus className="w-4 h-4 text-indigo-300" />,
               title: L('Undangan Langsung @Handle & Email', 'Direct @Handle & Email Invites'),
               desc: L(
-                'Leader mengundang rekan tim langsung dari Pengaturan Proyek → Tim dengan penetapan peran Kontributor atau Project Lead secara eksplisit.',
-                'Leaders invite teammates straight from Project Settings → Team with explicit Contributor or Project Lead role assignment.',
+                'Leader mengundang rekan tim langsung dari panel Tim Proyek dengan penetapan peran Kontributor atau Project Lead secara eksplisit.',
+                'Leaders invite teammates straight from the Project Team panel with explicit Contributor or Project Lead role assignment.',
               ),
             },
             {

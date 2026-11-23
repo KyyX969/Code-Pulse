@@ -204,7 +204,7 @@ export function DeploymentsPanel({
                     onClick={onOpenSettings}
                     className="text-[11px] font-medium text-zinc-400 hover:text-white cursor-pointer"
                   >
-                    {L('Pengaturan Proyek', 'Project Settings')}
+                    {L('Integrasi & Vault', 'Integrations & Vault')}
                   </button>
                 )}
               </div>
@@ -346,7 +346,7 @@ export function DeploymentsPanel({
                           'Simulation output only — link a Vercel Project in ',
                         )}
                         <strong className="text-white">
-                          {L('Pengaturan Proyek', 'Project Settings')}
+                          {L('Konfigurasi Build di atas', 'Build Configuration above')}
                         </strong>{' '}
                         {L(
                           'untuk memublikasikan URL Vercel aktif.',

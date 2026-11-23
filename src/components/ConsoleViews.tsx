@@ -1699,13 +1699,6 @@ function ProjectsDirectorySection({
                     >
                       {L('Deployment', 'Deployments')}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void onEnterProject(ws.id, 'settings')}
-                      className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-[11px] text-zinc-300 cursor-pointer"
-                    >
-                      {L('Pengaturan', 'Settings')}
-                    </button>
                   </div>
                   <button
                     type="button"
@@ -2492,13 +2485,13 @@ function SetupGuideSection({
               <>
                 Tautkan token Vercel terenkripsi Anda sekali saja di{' '}
                 <strong>Integrasi &amp; Vault</strong>, lalu hubungkan setiap workspace proyek ke
-                proyek Vercel-nya di dalam <strong>Pengaturan Proyek</strong>.
+                proyek Vercel-nya langsung di tab <strong>Deployment</strong>.
               </>
             ) : (
               <>
                 Link your encrypted Vercel token once in <strong>Integrations &amp; Vault</strong>,
-                then connect each project workspace to its Vercel project inside{' '}
-                <strong>Project Settings</strong>.
+                then connect each project workspace to its Vercel project directly inside the{' '}
+                <strong>Deployments</strong> tab.
               </>
             )}
           </p>

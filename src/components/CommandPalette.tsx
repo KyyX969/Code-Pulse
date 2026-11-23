@@ -7,13 +7,13 @@ import {
   Plus,
   Rocket,
   Search,
-  Settings,
   ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { Task } from '../../shared/types.ts';
 import { useLanguage } from '../lib/i18nContext.ts';
 
-export type PaletteTab = 'board' | 'gatekeeper' | 'deployments' | 'live' | 'settings';
+export type PaletteTab = 'board' | 'gatekeeper' | 'deployments' | 'live';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -22,6 +22,7 @@ interface CommandPaletteProps {
   onNavigate: (tab: PaletteTab) => void;
   onSelectTask: (task: Task) => void;
   onNewTask: () => void;
+  onManageProject?: () => void;
 }
 
 interface PaletteItem {
@@ -40,6 +41,7 @@ export function CommandPalette({
   onNavigate,
   onSelectTask,
   onNewTask,
+  onManageProject,
 }: CommandPaletteProps) {
   const { L } = useLanguage();
   const [query, setQuery] = useState('');
@@ -87,14 +89,6 @@ export function CommandPalette({
         run: () => onNavigate('live'),
       },
       {
-        id: 'nav-settings',
-        group: L('Navigasi', 'Navigation'),
-        label: L('Buka Integrasi & Pengaturan', 'Go to Integrations & Settings'),
-        hint: 'G S',
-        icon: <Settings className="w-4 h-4 text-zinc-400" />,
-        run: () => onNavigate('settings'),
-      },
-      {
         id: 'act-new-task',
         group: L('Aksi', 'Actions'),
         label: L('Buat Tugas Kanban Baru', 'Create New Kanban Task'),
@@ -102,6 +96,18 @@ export function CommandPalette({
         icon: <Plus className="w-4 h-4 text-emerald-400" />,
         run: () => onNewTask(),
       },
+      ...(onManageProject
+        ? [
+            {
+              id: 'act-manage-project',
+              group: L('Aksi', 'Actions'),
+              label: L('Kelola Tim & Repository Proyek', 'Manage Project Team & Repository'),
+              hint: 'M',
+              icon: <SlidersHorizontal className="w-4 h-4 text-zinc-300" />,
+              run: () => onManageProject(),
+            },
+          ]
+        : []),
     ];
 
     const taskItems: PaletteItem[] = tasks.map((task) => ({
@@ -122,7 +128,7 @@ export function CommandPalette({
         (item.hint || '').toLowerCase().includes(q) ||
         item.group.toLowerCase().includes(q),
     );
-  }, [L, onNavigate, onNewTask, onSelectTask, query, tasks]);
+  }, [L, onManageProject, onNavigate, onNewTask, onSelectTask, query, tasks]);
 
   const safeSelected =
     items.length === 0 ? 0 : Math.min(selectedIndex, items.length - 1);
