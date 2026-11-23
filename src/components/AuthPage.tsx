@@ -146,12 +146,19 @@ export function AuthPage({
         ),
       });
     } catch {
+      const isLocal =
+        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       setNotice({
         tone: 'error',
-        message: L(
-          'Server backend API (port 4000) tidak merespons. Pastikan Anda menjalankan "npm run dev" (API + WEB), lalu coba lagi.',
-          'Backend API server (port 4000) is not responding. Make sure you started both servers with "npm run dev", then try again.',
-        ),
+        message: isLocal
+          ? L(
+              'Server backend API (port 4000) tidak merespons. Pastikan Anda menjalankan "npm run dev" (API + WEB), lalu coba lagi.',
+              'Backend API server (port 4000) is not responding. Make sure you started both servers with "npm run dev", then try again.',
+            )
+          : L(
+              'Layanan API server sedang tidak merespons. Silakan muat ulang halaman atau coba beberapa saat lagi.',
+              'The API service is temporarily unavailable. Please refresh the page or try again shortly.',
+            ),
       });
     } finally {
       setCheckingGithub(false);

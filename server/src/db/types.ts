@@ -10,7 +10,7 @@ import type {
   WebhookEvent,
   Workspace,
   WorkspaceInvitation,
-} from '../../../shared/types.ts';
+} from '../../../shared/types.js';
 
 export interface StoredUser {
   id: string;

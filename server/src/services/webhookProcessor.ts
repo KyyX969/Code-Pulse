@@ -1,9 +1,9 @@
-import type { DiffSummary, Task, WebhookEvent } from '../../../shared/types.ts';
-import { getStore } from '../db/index.ts';
-import type { StoredWorkspace } from '../db/types.ts';
-import { realtimeHub } from '../ws/realtime.ts';
-import { decryptToken, extractTaskCodes } from '../utils/crypto.ts';
-import { fetchGitHubDiff } from './githubService.ts';
+import type { DiffSummary, Task, WebhookEvent } from '../../../shared/types.js';
+import { getStore } from '../db/index.js';
+import type { StoredWorkspace } from '../db/types.js';
+import { realtimeHub } from '../ws/realtime.js';
+import { decryptToken, extractTaskCodes } from '../utils/crypto.js';
+import { fetchGitHubDiff } from './githubService.js';
 
 export interface NormalizedGitHubWebhookInput {
   eventType: 'push' | 'pull_request';

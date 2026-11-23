@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
-import { config } from '../config.ts';
-import { getStore } from '../db/index.ts';
-import { requireAuth } from '../middleware/auth.ts';
-import { processWebhookPayload } from '../services/webhookProcessor.ts';
-import { decryptToken, verifyGitHubWebhookSignature } from '../utils/crypto.ts';
+import { config } from '../config.js';
+import { getStore } from '../db/index.js';
+import { requireAuth } from '../middleware/auth.js';
+import { processWebhookPayload } from '../services/webhookProcessor.js';
+import { decryptToken, verifyGitHubWebhookSignature } from '../utils/crypto.js';
 
 export const webhooksRouter = Router();
 

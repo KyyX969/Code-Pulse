@@ -1,4 +1,4 @@
-import type { PublicUser, UserRole, Workspace, WorkspaceMember } from './types.ts';
+import type { PublicUser, UserRole, Workspace, WorkspaceMember } from './types.js';
 
 interface WorkspaceRoleContext {
   ownerId: string;

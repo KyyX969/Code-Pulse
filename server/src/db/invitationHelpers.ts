@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { StoredUser } from './types.ts';
+import type { StoredUser } from './types.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 

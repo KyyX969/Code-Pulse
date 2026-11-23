@@ -9,10 +9,10 @@ import type {
   UserRole,
   WebhookEvent,
   WorkspaceInvitation,
-} from '../../../shared/types.ts';
-import { config } from '../config.ts';
-import { doesInvitationMatchUser, generateInviteCode } from './invitationHelpers.ts';
-import { createSeedData, type LocalDbSnapshot } from './seed.ts';
+} from '../../../shared/types.js';
+import { config } from '../config.js';
+import { doesInvitationMatchUser, generateInviteCode } from './invitationHelpers.js';
+import { createSeedData, type LocalDbSnapshot } from './seed.js';
 import type {
   CreateInvitationInput,
   CreateTaskInput,
@@ -21,7 +21,7 @@ import type {
   StoredUser,
   StoredWorkspace,
   UpdateTaskInput,
-} from './types.ts';
+} from './types.js';
 
 function slugify(name: string): string {
   return (

@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { getStore } from '../db/index.ts';
-import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.ts';
-import { triggerVercelDeployment } from '../services/vercelService.ts';
-import { decryptToken } from '../utils/crypto.ts';
+import { getStore } from '../db/index.js';
+import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.js';
+import { triggerVercelDeployment } from '../services/vercelService.js';
+import { decryptToken } from '../utils/crypto.js';
 
 export const deploymentsRouter = Router({ mergeParams: true });
 

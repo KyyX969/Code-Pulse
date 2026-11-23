@@ -1,24 +1,24 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
-import { config } from '../config.ts';
-import { getStore } from '../db/index.ts';
-import { toPublicWorkspace } from '../db/types.ts';
-import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.ts';
+import { config } from '../config.js';
+import { getStore } from '../db/index.js';
+import { toPublicWorkspace } from '../db/types.js';
+import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.js';
 import {
   enableBranchProtectionOnMain,
   fetchUserGitHubRepos,
   registerGitHubWebhook,
-} from '../services/githubService.ts';
-import type { UserRole, VercelEnvVarInput } from '../../../shared/types.ts';
+} from '../services/githubService.js';
+import type { UserRole, VercelEnvVarInput } from '../../../shared/types.js';
 import {
   deleteVercelEnvVar,
   fetchVercelProjects,
   getVercelProjectConfig,
   inspectGitHubRepoPackage,
   provisionVercelProject,
-} from '../services/vercelService.ts';
-import { decryptToken, encryptToken } from '../utils/crypto.ts';
-import { realtimeHub } from '../ws/realtime.ts';
+} from '../services/vercelService.js';
+import { decryptToken, encryptToken } from '../utils/crypto.js';
+import { realtimeHub } from '../ws/realtime.js';
 
 export const workspacesRouter = Router();
 

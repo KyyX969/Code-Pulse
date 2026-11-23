@@ -1,16 +1,16 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
-import { getStore } from '../db/index.ts';
-import { toPublicWorkspace } from '../db/types.ts';
-import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.ts';
+import { getStore } from '../db/index.js';
+import { toPublicWorkspace } from '../db/types.js';
+import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.js';
 import {
   enableBranchProtectionOnMain,
   fetchGitHubDiff,
   mergeGitHubTask,
-} from '../services/githubService.ts';
-import { triggerVercelDeployment } from '../services/vercelService.ts';
-import { decryptToken } from '../utils/crypto.ts';
-import { realtimeHub } from '../ws/realtime.ts';
+} from '../services/githubService.js';
+import { triggerVercelDeployment } from '../services/vercelService.js';
+import { decryptToken } from '../utils/crypto.js';
+import { realtimeHub } from '../ws/realtime.js';
 
 export const gatekeeperRouter = Router({ mergeParams: true });
 

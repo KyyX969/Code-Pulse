@@ -1,22 +1,22 @@
 import { Octokit } from '@octokit/rest';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import {
   config,
   isGitHubOAuthConfigured,
   isSupabaseConfigured,
   isVercelOAuthConfigured,
-} from '../config.ts';
-import { getStore, isSupabaseStoreActive } from '../db/index.ts';
-import { toPublicUser } from '../db/types.ts';
-import { parseCookies, requireAuth, SESSION_COOKIE_NAME } from '../middleware/auth.ts';
+} from '../config.js';
+import { getStore, isSupabaseStoreActive } from '../db/index.js';
+import { toPublicUser } from '../db/types.js';
+import { parseCookies, requireAuth, SESSION_COOKIE_NAME } from '../middleware/auth.js';
 import {
   encryptToken,
   hashPassword,
   signSessionToken,
   verifyPassword,
-} from '../utils/crypto.ts';
+} from '../utils/crypto.js';
 
 function createEphemeralSupabaseClient(useServiceKey = false) {
   const key = useServiceKey
@@ -193,7 +193,7 @@ authRouter.post('/login', async (req, res) => {
 
 type GitHubOAuthIntent = 'login' | 'register' | 'connect' | 'auto';
 
-function clearGitHubOAuthCookies(res: import('express').Response) {
+function clearGitHubOAuthCookies(res: Response) {
   res.clearCookie('cp_oauth_state', { path: '/' });
   res.clearCookie('cp_oauth_intent', { path: '/' });
   res.clearCookie('cp_oauth_return', { path: '/' });

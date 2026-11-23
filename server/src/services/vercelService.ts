@@ -5,10 +5,10 @@ import type {
   VercelEnvVarItem,
   VercelProjectConfig,
   VercelProjectItem,
-} from '../../../shared/types.ts';
-import { getStore } from '../db/index.ts';
-import { extractGitHubTarball, type ExtractedRepoFile } from '../utils/tar.ts';
-import { realtimeHub } from '../ws/realtime.ts';
+} from '../../../shared/types.js';
+import { getStore } from '../db/index.js';
+import { extractGitHubTarball, type ExtractedRepoFile } from '../utils/tar.js';
+import { realtimeHub } from '../ws/realtime.js';
 
 function appendTeamQuery(url: string, teamId?: string | null): string {
   if (!teamId) return url;

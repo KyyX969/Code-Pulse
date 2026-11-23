@@ -11,9 +11,9 @@ import type {
   WebhookEvent,
   WorkspaceInvitation,
   WorkspaceMember,
-} from '../../../shared/types.ts';
-import { config } from '../config.ts';
-import { doesInvitationMatchUser, generateInviteCode } from './invitationHelpers.ts';
+} from '../../../shared/types.js';
+import { config } from '../config.js';
+import { doesInvitationMatchUser, generateInviteCode } from './invitationHelpers.js';
 import type {
   CreateInvitationInput,
   CreateTaskInput,
@@ -22,7 +22,7 @@ import type {
   StoredUser,
   StoredWorkspace,
   UpdateTaskInput,
-} from './types.ts';
+} from './types.js';
 
 function isMissingTableError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;

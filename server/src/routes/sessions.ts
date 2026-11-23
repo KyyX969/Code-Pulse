@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { getStore } from '../db/index.ts';
-import { requireAuth } from '../middleware/auth.ts';
-import { realtimeHub } from '../ws/realtime.ts';
+import { getStore } from '../db/index.js';
+import { requireAuth } from '../middleware/auth.js';
+import { realtimeHub } from '../ws/realtime.js';
 
 export const sessionsRouter = Router({ mergeParams: true });
 

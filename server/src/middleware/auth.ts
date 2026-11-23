@@ -1,8 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
-import { isWorkspaceLeader } from '../../../shared/permissions.ts';
-import { getStore } from '../db/index.ts';
-import type { StoredUser } from '../db/types.ts';
-import { verifySessionToken } from '../utils/crypto.ts';
+import { isWorkspaceLeader } from '../../../shared/permissions.js';
+import { getStore } from '../db/index.js';
+import type { StoredUser } from '../db/types.js';
+import { verifySessionToken } from '../utils/crypto.js';
 
 declare global {
   namespace Express {

@@ -3,18 +3,21 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config, isSupabaseConfigured } from './config.ts';
-import { attachUser } from './middleware/auth.ts';
-import { authRouter } from './routes/auth.ts';
-import { deploymentsRouter } from './routes/deployments.ts';
-import { gatekeeperRouter } from './routes/gatekeeper.ts';
-import { invitationsRouter } from './routes/invitations.ts';
-import { sessionsRouter } from './routes/sessions.ts';
-import { tasksRouter } from './routes/tasks.ts';
-import { webhooksRouter } from './routes/webhooks.ts';
-import { workspacesRouter } from './routes/workspaces.ts';
+import { config, isSupabaseConfigured } from './config.js';
+import { attachUser } from './middleware/auth.js';
+import { authRouter } from './routes/auth.js';
+import { deploymentsRouter } from './routes/deployments.js';
+import { gatekeeperRouter } from './routes/gatekeeper.js';
+import { invitationsRouter } from './routes/invitations.js';
+import { sessionsRouter } from './routes/sessions.js';
+import { tasksRouter } from './routes/tasks.js';
+import { webhooksRouter } from './routes/webhooks.js';
+import { workspacesRouter } from './routes/workspaces.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const safeDirname =
+  typeof import.meta !== 'undefined' && import.meta.url
+    ? path.dirname(fileURLToPath(import.meta.url))
+    : process.cwd();
 
 export function createApp() {
   const app = express();
@@ -68,7 +71,7 @@ export function createApp() {
   app.use('/api/webhooks', webhooksRouter);
 
   // Serve built frontend in non-Vercel Node production if dist/ exists
-  const distDir = path.resolve(__dirname, '../../dist');
+  const distDir = path.resolve(safeDirname, '../../dist');
   if (!process.env.VERCEL && fs.existsSync(distDir)) {
     app.use(express.static(distDir));
     app.use((req, res, next) => {

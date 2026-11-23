@@ -1,10 +1,16 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { RTCIceServerConfig } from '../../shared/types.ts';
+import type { RTCIceServerConfig } from '../../shared/types.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+const safeDirname =
+  typeof import.meta !== 'undefined' && import.meta.url
+    ? path.dirname(fileURLToPath(import.meta.url))
+    : process.cwd();
+
+if (!process.env.VERCEL) {
+  dotenv.config({ path: path.resolve(safeDirname, '../../.env'), override: true });
+}
 
 const parseIceServers = (): RTCIceServerConfig[] => {
   const servers: RTCIceServerConfig[] = [
@@ -72,7 +78,7 @@ export const config = {
   iceServers: parseIceServers(),
   dataFilePath: process.env.VERCEL
     ? '/tmp/codepulse-db.json'
-    : path.resolve(__dirname, '../data/codepulse-db.json'),
+    : path.resolve(safeDirname, '../data/codepulse-db.json'),
 };
 
 export const isSupabaseConfigured = (): boolean =>

@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { isWorkspaceLeader } from '../../../shared/permissions.ts';
-import type { TaskPriority, TaskStatus } from '../../../shared/types.ts';
-import { getStore } from '../db/index.ts';
-import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.ts';
-import { realtimeHub } from '../ws/realtime.ts';
+import { isWorkspaceLeader } from '../../../shared/permissions.js';
+import type { TaskPriority, TaskStatus } from '../../../shared/types.js';
+import { getStore } from '../db/index.js';
+import { requireAuth, requireWorkspaceLeader } from '../middleware/auth.js';
+import { realtimeHub } from '../ws/realtime.js';
 
 export const tasksRouter = Router({ mergeParams: true });
 

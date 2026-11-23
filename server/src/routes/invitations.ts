@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { isWorkspaceLeader } from '../../../shared/permissions.ts';
-import { getStore } from '../db/index.ts';
-import { doesInvitationMatchUser, extractInviteCode } from '../db/invitationHelpers.ts';
-import { toPublicWorkspace } from '../db/types.ts';
-import { requireAuth } from '../middleware/auth.ts';
-import { realtimeHub } from '../ws/realtime.ts';
+import { isWorkspaceLeader } from '../../../shared/permissions.js';
+import { getStore } from '../db/index.js';
+import { doesInvitationMatchUser, extractInviteCode } from '../db/invitationHelpers.js';
+import { toPublicWorkspace } from '../db/types.js';
+import { requireAuth } from '../middleware/auth.js';
+import { realtimeHub } from '../ws/realtime.js';
 
 export const invitationsRouter = Router();
 

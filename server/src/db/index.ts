@@ -1,7 +1,7 @@
-import { isSupabaseConfigured } from '../config.ts';
-import { LocalJsonStore } from './localStore.ts';
-import { SupabaseStore } from './supabaseStore.ts';
-import type { DataStore } from './types.ts';
+import { isSupabaseConfigured } from '../config.js';
+import { LocalJsonStore } from './localStore.js';
+import { SupabaseStore } from './supabaseStore.js';
+import type { DataStore } from './types.js';
 
 let storeInstance: DataStore | null = null;
 

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { config } from '../config.ts';
+import { config } from '../config.js';
 
 function deriveAesKey(secret: string): Buffer {
   return crypto.createHash('sha256').update(secret, 'utf8').digest();

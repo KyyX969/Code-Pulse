@@ -5,17 +5,17 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../src/app.ts';
-import { setStoreForTesting } from '../src/db/index.ts';
-import { LocalJsonStore } from '../src/db/localStore.ts';
-import { normalizeVercelSlug } from '../src/services/vercelService.ts';
+import { createApp } from '../src/app.js';
+import { setStoreForTesting } from '../src/db/index.js';
+import { LocalJsonStore } from '../src/db/localStore.js';
+import { normalizeVercelSlug } from '../src/services/vercelService.js';
 import {
   decryptToken,
   encryptToken,
   extractTaskCodes,
   verifyGitHubWebhookSignature,
-} from '../src/utils/crypto.ts';
-import { extractGitHubTarball } from '../src/utils/tar.ts';
+} from '../src/utils/crypto.js';
+import { extractGitHubTarball } from '../src/utils/tar.js';
 
 function buildTarEntry(filePath: string, content: string): Buffer {
   const header = Buffer.alloc(512, 0);

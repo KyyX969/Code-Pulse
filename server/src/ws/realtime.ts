@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { RealtimeServerMessage } from '../../../shared/types.ts';
+import type { RealtimeServerMessage } from '../../../shared/types.js';
 
 interface ClientMeta {
   clientId: string;

@@ -1,8 +1,8 @@
 import http from 'node:http';
-import { createApp } from './app.ts';
-import { config } from './config.ts';
-import { getStore } from './db/index.ts';
-import { realtimeHub } from './ws/realtime.ts';
+import { createApp } from './app.js';
+import { config } from './config.js';
+import { getStore } from './db/index.js';
+import { realtimeHub } from './ws/realtime.js';
 
 async function bootstrap() {
   await getStore();

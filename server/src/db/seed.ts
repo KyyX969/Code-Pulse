@@ -4,9 +4,9 @@ import type {
   Task,
   WebhookEvent,
   WorkspaceInvitation,
-} from '../../../shared/types.ts';
-import { encryptToken } from '../utils/crypto.ts';
-import type { StoredUser, StoredWorkspace } from './types.ts';
+} from '../../../shared/types.js';
+import { encryptToken } from '../utils/crypto.js';
+import type { StoredUser, StoredWorkspace } from './types.js';
 
 export interface LocalDbSnapshot {
   users: StoredUser[];

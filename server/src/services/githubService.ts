@@ -1,5 +1,5 @@
 import { Octokit } from '@octokit/rest';
-import type { DiffFile, DiffSummary, GitHubRepoItem, Task } from '../../../shared/types.ts';
+import type { DiffFile, DiffSummary, GitHubRepoItem, Task } from '../../../shared/types.js';
 
 export async function fetchUserGitHubRepos(token: string): Promise<GitHubRepoItem[]> {
   const octokit = new Octokit({ auth: token });
