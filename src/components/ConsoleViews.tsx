@@ -26,7 +26,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { getWorkspaceMemberRole } from '../../shared/permissions.ts';
+import { getWorkspaceMemberRole, isWorkspaceLeader } from '../../shared/permissions.ts';
 import type {
   Deployment,
   GitHubRepoItem,
@@ -78,7 +78,6 @@ interface ConsoleViewProps {
   reposLoading: boolean;
   reposError: string | null;
   incomingInvitations: WorkspaceInvitation[];
-  sentInvitations: WorkspaceInvitation[];
   pendingInviteCode?: string;
   onRefreshRepos: () => Promise<void>;
   onRefreshInvitations: () => Promise<void>;
@@ -103,7 +102,6 @@ export function ConsoleViewRouter({
   reposLoading,
   reposError,
   incomingInvitations,
-  sentInvitations,
   pendingInviteCode,
   onRefreshRepos,
   onRefreshInvitations,
@@ -150,12 +148,18 @@ export function ConsoleViewRouter({
       return (
         <InvitationsView
           currentUser={currentUser}
-          workspaces={workspaces}
           incoming={incomingInvitations}
-          sent={sentInvitations}
           initialInviteCode={pendingInviteCode}
           onRefreshInvitations={onRefreshInvitations}
           onWorkspaceJoined={onWorkspaceJoined}
+          onOpenProjectTeam={() => {
+            const leadWs = workspaces.find((w) => isWorkspaceLeader(w, currentUser));
+            if (leadWs) {
+              void onEnterProject(leadWs.id, 'manage');
+            } else {
+              onNavigateSection('projects');
+            }
+          }}
           onToast={onToast}
         />
       );
@@ -1698,6 +1702,13 @@ function ProjectsDirectorySection({
                       className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-[11px] text-zinc-300 cursor-pointer"
                     >
                       {L('Deployment', 'Deployments')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onEnterProject(ws.id, 'manage')}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-[11px] text-zinc-300 cursor-pointer"
+                    >
+                      {L('Tim & Undangan', 'Team & Invites')}
                     </button>
                   </div>
                   <button

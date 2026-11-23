@@ -17,10 +17,13 @@ import { api, buildInviteUrl } from '../lib/api.ts';
 import { useLanguage } from '../lib/i18nContext.ts';
 import { InvitationsListSkeleton } from './LoadingUI.tsx';
 
+type InviteFilter = 'all' | 'pending' | 'accepted' | 'closed';
+
 interface TeamInvitationsCardProps {
   workspace: Workspace;
   currentUser: PublicUser;
   onWorkspaceUpdated: (ws: Workspace) => void;
+  onInvitationsChanged?: () => void;
   onToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -28,6 +31,7 @@ export function TeamInvitationsCard({
   workspace,
   currentUser,
   onWorkspaceUpdated,
+  onInvitationsChanged,
   onToast,
 }: TeamInvitationsCardProps) {
   const { L } = useLanguage();
@@ -35,6 +39,7 @@ export function TeamInvitationsCard({
 
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
   const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<string | null>(null);
+  const [inviteFilter, setInviteFilter] = useState<InviteFilter>('all');
   const [target, setTarget] = useState('');
   const [role, setRole] = useState<UserRole>('member');
   const [message, setMessage] = useState('');
@@ -97,6 +102,7 @@ export function TeamInvitationsCard({
         message: message.trim(),
       });
       setInvitations((prev) => [invitation, ...prev]);
+      onInvitationsChanged?.();
       setTarget('');
       setMessage('');
       const inviteeLabel = invitation.inviteeUsername
@@ -139,6 +145,7 @@ export function TeamInvitationsCard({
           L(`Bergabunglah ke ${workspace.name} di CodePulse`, `Join ${workspace.name} on CodePulse`),
       });
       setInvitations((prev) => [invitation, ...prev]);
+      onInvitationsChanged?.();
       copyValue(
         invitation.id,
         buildInviteUrl(invitation.inviteCode),
@@ -160,6 +167,7 @@ export function TeamInvitationsCard({
     try {
       const { invitation } = await api.revokeInvitation(invId);
       setInvitations((prev) => prev.map((item) => (item.id === invId ? invitation : item)));
+      onInvitationsChanged?.();
       onToast('info', L('Undangan dibatalkan.', 'Invitation revoked.'));
     } catch (err) {
       onToast(
@@ -222,6 +230,12 @@ export function TeamInvitationsCard({
   }
 
   const pendingInvites = invitations.filter((i) => i.status === 'pending');
+  const filteredInvitations = invitations.filter((inv) => {
+    if (inviteFilter === 'all') return true;
+    if (inviteFilter === 'pending') return inv.status === 'pending';
+    if (inviteFilter === 'accepted') return inv.status === 'accepted';
+    return inv.status === 'declined' || inv.status === 'revoked';
+  });
 
   return (
     <div className="cp-panel rounded-2xl p-6 space-y-6">
@@ -346,22 +360,55 @@ export function TeamInvitationsCard({
           </form>
 
           {/* Pending & Sent Invitations for this Workspace */}
-          <div className="space-y-2">
-            <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-500">
-              {L('Undangan Aktif & Terbaru', 'Active & Recent Invitations')} ({invitations.length})
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-500">
+                {L('Riwayat & Undangan Aktif Proyek', 'Project Active & Sent Invitations')} (
+                {invitations.length})
+              </div>
+              {invitations.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {(
+                    [
+                      { id: 'all', label: L('Semua', 'All') },
+                      { id: 'pending', label: L('Menunggu', 'Pending') },
+                      { id: 'accepted', label: L('Diterima', 'Accepted') },
+                      { id: 'closed', label: L('Ditutup', 'Closed') },
+                    ] as Array<{ id: InviteFilter; label: string }>
+                  ).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setInviteFilter(f.id)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                        inviteFilter === f.id
+                          ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/35'
+                          : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-white/8'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {loadingInvitations ? (
               <InvitationsListSkeleton count={2} />
-            ) : invitations.length === 0 ? (
+            ) : filteredInvitations.length === 0 ? (
               <div className="p-4 rounded-xl bg-zinc-950/60 border border-dashed border-white/10 text-xs text-zinc-500 text-center">
-                {L(
-                  'Belum ada undangan yang dikirim untuk proyek ini.',
-                  'No invitations sent for this project yet.',
-                )}
+                {invitations.length === 0
+                  ? L(
+                      'Belum ada undangan yang dikirim untuk proyek ini.',
+                      'No invitations sent for this project yet.',
+                    )
+                  : L(
+                      'Tidak ada undangan pada filter ini.',
+                      'No invitations match this filter.',
+                    )}
               </div>
             ) : (
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {invitations.map((inv) => {
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                {filteredInvitations.map((inv) => {
                   const isOpenLink = !inv.inviteeUsername && !inv.inviteeEmail;
                   const inviteLink = buildInviteUrl(inv.inviteCode);
                   return (
@@ -403,6 +450,25 @@ export function TeamInvitationsCard({
 
                       {inv.status === 'pending' && (
                         <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyValue(
+                                `code-${inv.id}`,
+                                inv.inviteCode,
+                                L('Kode undangan', 'Invite code'),
+                              )
+                            }
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-[11px] font-mono text-cyan-300 cursor-pointer"
+                            title={L('Salin kode undangan', 'Copy invite code')}
+                          >
+                            {copiedId === `code-${inv.id}` ? (
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                            <span>{L('Kode', 'Code')}</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() =>

@@ -52,9 +52,9 @@ import { LiveMonitorPanel } from './components/LiveMonitorPanel.tsx';
 import { CodePulseSplashLoader, WorkspaceViewSkeleton } from './components/LoadingUI.tsx';
 import { OnboardingView } from './components/OnboardingView.tsx';
 import {
-  ProjectManageModal,
-  type ProjectManageTab,
-} from './components/ProjectManageModal.tsx';
+  ProjectManageView,
+  type ProjectManageSubTab,
+} from './components/ProjectManageView.tsx';
 import { TaskDiffModal } from './components/TaskDiffModal.tsx';
 import { api } from './lib/api.ts';
 import { readStoredLocale, useLanguage } from './lib/i18nContext.ts';
@@ -70,7 +70,7 @@ interface ToastItem {
 const CONSOLE_SECTION_LABELS: Record<ConsoleSection, { id: string; en: string }> = {
   home: { id: 'Ringkasan', en: 'Overview' },
   projects: { id: 'Proyek', en: 'Projects' },
-  invitations: { id: 'Undangan & Akses Tim', en: 'Invitations & Team Access' },
+  invitations: { id: 'Undangan Masuk', en: 'Incoming Invitations' },
   repos: { id: 'Repository GitHub', en: 'GitHub Repositories' },
   activity: { id: 'Aktivitas & Log Audit', en: 'Activity & Audit Logs' },
   guide: { id: 'Panduan Setup', en: 'Setup & Guide' },
@@ -82,6 +82,7 @@ const TAB_LABELS: Record<PaletteTab, { id: string; en: string }> = {
   gatekeeper: { id: 'Gatekeeper & Webhook', en: 'Gatekeeper & Webhooks' },
   deployments: { id: 'Deployment Vercel', en: 'Vercel Deployments' },
   live: { id: 'Monitor Layar Langsung', en: 'Live Screen Monitor' },
+  manage: { id: 'Kelola Tim & Proyek', en: 'Team & Project' },
 };
 
 const AUTH_ERROR_MESSAGES: Record<string, { id: string; en: string }> = {
@@ -234,7 +235,6 @@ export function App() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
   const [incomingInvitations, setIncomingInvitations] = useState<WorkspaceInvitation[]>([]);
-  const [sentInvitations, setSentInvitations] = useState<WorkspaceInvitation[]>([]);
 
   const [navScope, setNavScope] = useState<'console' | 'project'>('console');
   const [consoleSection, setConsoleSection] = useState<ConsoleSection>(() =>
@@ -242,7 +242,7 @@ export function App() {
   );
   const [activeTab, setActiveTab] = useState<PaletteTab>('board');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [projectManageTab, setProjectManageTab] = useState<ProjectManageTab | null>(null);
+  const [manageSubTab, setManageSubTab] = useState<ProjectManageSubTab>('team');
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -299,7 +299,6 @@ export function App() {
     try {
       const res = await api.listMyInvitations();
       setIncomingInvitations(res.incoming);
-      setSentInvitations(res.sent);
     } catch {
       // ignore initial invitation fetch failure
     }
@@ -662,7 +661,6 @@ export function App() {
     setTasks([]);
     setRepos([]);
     setIncomingInvitations([]);
-    setSentInvitations([]);
     navigateAuth(null);
   }
 
@@ -809,6 +807,18 @@ export function App() {
     setMobileMenuOpen(false);
   }
 
+  function openProjectManage(subTab: ProjectManageSubTab = 'team') {
+    if (!activeWorkspace) {
+      setShowNewWorkspace(true);
+      setMobileMenuOpen(false);
+      return;
+    }
+    setManageSubTab(subTab);
+    setActiveTab('manage');
+    setNavScope('project');
+    setMobileMenuOpen(false);
+  }
+
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#0b0c12] border-r border-white/8">
       {/* Sidebar Brand */}
@@ -876,15 +886,16 @@ export function App() {
                 {activeWorkspace.githubOwner && activeWorkspace.githubRepo ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setProjectManageTab('repo');
-                      setMobileMenuOpen(false);
-                    }}
+                    onClick={() => openProjectManage('repo')}
                     title={L(
                       'Kelola repository, webhook & detail proyek',
                       'Manage repository, webhook & project details',
                     )}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950/70 hover:bg-zinc-900 border border-white/6 hover:border-white/15 flex items-center justify-between gap-2 text-[11px] font-mono transition cursor-pointer"
+                    className={`w-full px-2.5 py-1.5 rounded-lg border flex items-center justify-between gap-2 text-[11px] font-mono transition cursor-pointer ${
+                      navScope === 'project' && activeTab === 'manage' && manageSubTab === 'repo'
+                        ? 'bg-indigo-500/15 border-indigo-400/40 text-white'
+                        : 'bg-zinc-950/70 hover:bg-zinc-900 border-white/6 hover:border-white/15'
+                    }`}
                   >
                     <span className="inline-flex items-center gap-1.5 text-zinc-300 truncate">
                       <GitBranch className="w-3 h-3 text-cyan-400 shrink-0" />
@@ -901,11 +912,12 @@ export function App() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      setProjectManageTab('repo');
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950/50 hover:bg-zinc-900 border border-dashed border-white/15 hover:border-indigo-400/40 flex items-center justify-between gap-2 text-[11px] text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+                    onClick={() => openProjectManage('repo')}
+                    className={`w-full px-2.5 py-1.5 rounded-lg border border-dashed flex items-center justify-between gap-2 text-[11px] transition cursor-pointer ${
+                      navScope === 'project' && activeTab === 'manage' && manageSubTab === 'repo'
+                        ? 'bg-indigo-500/15 border-indigo-400/50 text-white'
+                        : 'bg-zinc-950/50 hover:bg-zinc-900 border-white/15 hover:border-indigo-400/40 text-zinc-400 hover:text-zinc-200'
+                    }`}
                   >
                     <span className="inline-flex items-center gap-1.5 truncate">
                       <GitBranch className="w-3 h-3 text-amber-400 shrink-0" />
@@ -976,11 +988,12 @@ export function App() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setProjectManageTab('team');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-300 hover:text-indigo-200 cursor-pointer"
+                  onClick={() => openProjectManage('team')}
+                  className={`inline-flex items-center gap-1 text-[10px] font-medium transition cursor-pointer px-1.5 py-0.5 rounded-md ${
+                    navScope === 'project' && activeTab === 'manage' && manageSubTab === 'team'
+                      ? 'bg-indigo-500/20 border border-indigo-400/40 text-indigo-200'
+                      : 'text-indigo-300 hover:text-indigo-200 hover:bg-white/[0.04]'
+                  }`}
                   title={
                     activeProjectRole === 'leader'
                       ? L('Kelola anggota tim & undangan proyek', 'Manage team members & invitations')
@@ -1263,7 +1276,6 @@ export function App() {
                   reposLoading={reposLoading}
                   reposError={reposError}
                   incomingInvitations={incomingInvitations}
-                  sentInvitations={sentInvitations}
                   pendingInviteCode={pendingInviteCode}
                   onRefreshRepos={loadGitHubRepos}
                   onRefreshInvitations={loadInvitations}
@@ -1352,7 +1364,7 @@ export function App() {
                       setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)))
                     }
                     onOpenTask={(t) => setSelectedTask(t)}
-                    onOpenRepoConnect={() => setProjectManageTab('repo')}
+                    onOpenRepoConnect={() => openProjectManage('repo')}
                     onToast={pushToast}
                   />
                 )}
@@ -1392,6 +1404,21 @@ export function App() {
                     onToast={pushToast}
                   />
                 )}
+
+                {activeTab === 'manage' && (
+                  <ProjectManageView
+                    key={activeWorkspace.id}
+                    workspace={activeWorkspace}
+                    currentUser={currentUser}
+                    capabilities={capabilities}
+                    activeSubTab={manageSubTab}
+                    onChangeSubTab={setManageSubTab}
+                    onWorkspaceUpdated={handleWorkspaceUpdated}
+                    onWorkspaceDeleted={handleWorkspaceDeleted}
+                    onInvitationsChanged={() => void loadInvitations()}
+                    onToast={pushToast}
+                  />
+                )}
                   </>
                 )}
               </motion.div>
@@ -1415,23 +1442,7 @@ export function App() {
           setActiveTab('board');
           setExternalCreateOpen(true);
         }}
-        onManageProject={activeWorkspace ? () => setProjectManageTab('team') : undefined}
       />
-
-      {/* Lightweight Project Management Modal (Team & Repo) */}
-      {projectManageTab && activeWorkspace && (
-        <ProjectManageModal
-          key={`${activeWorkspace.id}-${projectManageTab}`}
-          workspace={activeWorkspace}
-          currentUser={currentUser}
-          capabilities={capabilities}
-          initialTab={projectManageTab}
-          onClose={() => setProjectManageTab(null)}
-          onWorkspaceUpdated={handleWorkspaceUpdated}
-          onWorkspaceDeleted={handleWorkspaceDeleted}
-          onToast={pushToast}
-        />
-      )}
 
       {/* Task Detail & Gatekeeper Diff Modal */}
       {selectedTask && activeWorkspace && (

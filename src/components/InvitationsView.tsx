@@ -5,95 +5,51 @@ import {
   Check,
   CheckCircle2,
   ClipboardPaste,
-  Clock,
   Copy,
   GitBranch,
   Inbox,
-  Link2,
   Mail,
   RefreshCw,
-  Send,
-  Shield,
   Ticket,
   Users,
   XCircle,
 } from 'lucide-react';
-import { isWorkspaceLeader } from '../../shared/permissions.ts';
-import type {
-  PublicUser,
-  UserRole,
-  Workspace,
-  WorkspaceInvitation,
-} from '../../shared/types.ts';
-import { api, buildInviteUrl } from '../lib/api.ts';
+import type { PublicUser, Workspace, WorkspaceInvitation } from '../../shared/types.ts';
+import { api } from '../lib/api.ts';
 import { useLanguage } from '../lib/i18nContext.ts';
 import { InvitationsListSkeleton } from './LoadingUI.tsx';
 
-type InviteTab = 'inbox' | 'join' | 'send' | 'sent';
-type SentFilter = 'all' | 'pending' | 'accepted' | 'closed';
+type InviteTab = 'inbox' | 'join';
 
 interface InvitationsViewProps {
   currentUser: PublicUser;
-  workspaces: Workspace[];
   incoming: WorkspaceInvitation[];
-  sent: WorkspaceInvitation[];
   initialInviteCode?: string;
   onRefreshInvitations: () => Promise<void>;
   onWorkspaceJoined: (ws: Workspace) => Promise<void>;
+  onOpenProjectTeam?: () => void;
   onToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
 export function InvitationsView({
   currentUser,
-  workspaces,
   incoming,
-  sent,
   initialInviteCode = '',
   onRefreshInvitations,
   onWorkspaceJoined,
+  onOpenProjectTeam,
   onToast,
 }: InvitationsViewProps) {
   const { L, locale } = useLanguage();
-  const leadWorkspaces = workspaces.filter((ws) => isWorkspaceLeader(ws, currentUser));
 
   const [activeTab, setActiveTab] = useState<InviteTab>(() =>
     initialInviteCode.trim() ? 'join' : 'inbox',
   );
-  const [sentFilter, setSentFilter] = useState<SentFilter>('all');
-
   const [joinInput, setJoinInput] = useState(initialInviteCode);
   const [joining, setJoining] = useState(false);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  const [sendWorkspaceId, setSendWorkspaceId] = useState(leadWorkspaces[0]?.id || '');
-  const [sendTarget, setSendTarget] = useState('');
-  const [sendRole, setSendRole] = useState<UserRole>('member');
-  const [sendMessage, setSendMessage] = useState('');
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [lastCreatedInvite, setLastCreatedInvite] = useState<WorkspaceInvitation | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const effectiveSendWorkspaceId =
-    leadWorkspaces.some((w) => w.id === sendWorkspaceId)
-      ? sendWorkspaceId
-      : leadWorkspaces[0]?.id || '';
-
-  const pendingSentCount = sent.filter((i) => i.status === 'pending').length;
-  const filteredSent = sent.filter((inv) => {
-    if (sentFilter === 'all') return true;
-    if (sentFilter === 'pending') return inv.status === 'pending';
-    if (sentFilter === 'accepted') return inv.status === 'accepted';
-    return inv.status === 'declined' || inv.status === 'revoked';
-  });
-
-  function formatInviteStatus(status: WorkspaceInvitation['status']) {
-    if (status === 'pending') return L('Tertunda', 'Pending');
-    if (status === 'accepted') return L('Diterima', 'Accepted');
-    if (status === 'declined') return L('Ditolak', 'Declined');
-    if (status === 'revoked') return L('Dicabut', 'Revoked');
-    return status;
-  }
 
   function copyText(key: string, value: string, label: string) {
     void navigator.clipboard.writeText(value);
@@ -207,87 +163,6 @@ export function InvitationsView({
     }
   }
 
-  async function handleRevoke(invId: string) {
-    setRespondingId(invId);
-    try {
-      await api.revokeInvitation(invId);
-      await onRefreshInvitations();
-      onToast('info', L('Undangan dicabut.', 'Invitation revoked.'));
-    } catch (err) {
-      onToast(
-        'error',
-        err instanceof Error
-          ? err.message
-          : L('Gagal mencabut undangan', 'Failed to revoke invitation'),
-      );
-    } finally {
-      setRespondingId(null);
-    }
-  }
-
-  async function handleSendInvite(openLinkOnly: boolean) {
-    if (!effectiveSendWorkspaceId) {
-      onToast(
-        'error',
-        L(
-          'Buat proyek terlebih dahulu untuk mengirim undangan.',
-          'Create a project first to send invitations.',
-        ),
-      );
-      return;
-    }
-    if (!openLinkOnly && !sendTarget.trim()) {
-      onToast(
-        'error',
-        L(
-          'Masukkan @username atau email, atau klik Buat Tautan.',
-          'Enter a @username or email, or click Generate Link.',
-        ),
-      );
-      return;
-    }
-
-    setSendingInvite(true);
-    try {
-      const { invitation } = await api.sendWorkspaceInvitation(effectiveSendWorkspaceId, {
-        target: openLinkOnly ? undefined : sendTarget.trim(),
-        role: sendRole,
-        message: sendMessage.trim(),
-      });
-      setLastCreatedInvite(invitation);
-      await onRefreshInvitations();
-      if (openLinkOnly) {
-        copyText(
-          invitation.id,
-          buildInviteUrl(invitation.inviteCode),
-          L('Tautan undangan', 'Shareable invite link'),
-        );
-      } else {
-        setSendTarget('');
-        setSendMessage('');
-        const targetLabel = invitation.inviteeUsername
-          ? `@${invitation.inviteeUsername}`
-          : invitation.inviteeEmail;
-        onToast(
-          'success',
-          L(
-            `Undangan terkirim ke ${targetLabel} (${invitation.inviteCode}).`,
-            `Invitation sent to ${targetLabel} (${invitation.inviteCode}).`,
-          ),
-        );
-      }
-    } catch (err) {
-      onToast(
-        'error',
-        err instanceof Error
-          ? err.message
-          : L('Gagal mengirim undangan', 'Failed to send invitation'),
-      );
-    } finally {
-      setSendingInvite(false);
-    }
-  }
-
   const tabs: Array<{
     id: InviteTab;
     label: string;
@@ -310,21 +185,6 @@ export function InvitationsView({
       label: L('Gabung via Kode', 'Join via Code'),
       icon: <Ticket className="w-4 h-4" />,
     },
-    {
-      id: 'send',
-      label: L('Kirim Undangan', 'Send Invite'),
-      icon: <Send className="w-4 h-4" />,
-    },
-    {
-      id: 'sent',
-      label: L('Riwayat Terkirim', 'Sent History'),
-      icon: <Clock className="w-4 h-4" />,
-      badge: sent.length,
-      badgeTone:
-        pendingSentCount > 0
-          ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-          : 'bg-white/[0.05] text-zinc-400 border-white/10',
-    },
   ];
 
   return (
@@ -333,12 +193,12 @@ export function InvitationsView({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            {L('Undangan & Akses Tim', 'Invitations & Team Access')}
+            {L('Undangan Masuk & Gabung Proyek', 'Incoming Invitations & Join Project')}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
             {L(
-              'Kelola undangan masuk, bergabung dengan kode proyek, atau undang rekan tim secara terpisah dan rapi.',
-              'Manage incoming invites, join via project code, or send team invitations in clean dedicated views.',
+              'Terima undangan masuk atau bergabung ke proyek rekan lewat kode. Pengiriman undangan & manajemen anggota kini berada di menu Kelola pada tiap proyek.',
+              'Accept incoming invites or join a teammate’s project by code. Sending invitations & member management now live inside each project’s Manage view.',
             )}
           </p>
         </div>
@@ -483,14 +343,16 @@ export function InvitationsView({
                     <Ticket className="w-3.5 h-3.5" />
                     <span>{L('Gabung via Kode', 'Join via Code')}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('send')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-200 text-xs font-medium transition cursor-pointer"
-                  >
-                    <Send className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>{L('Undang Rekan Tim', 'Invite Teammates')}</span>
-                  </button>
+                  {onOpenProjectTeam && (
+                    <button
+                      type="button"
+                      onClick={onOpenProjectTeam}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-200 text-xs font-medium transition cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>{L('Kelola Tim di Proyek', 'Manage Team in Project')}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -681,428 +543,14 @@ export function InvitationsView({
               ].map((item) => (
                 <div
                   key={item.step}
-                  className="p-4 rounded-xl bg-zinc-950/75 border border-white/[0.07] space-y-1.5"
+                  className="p-4 rounded-xl bg-zinc-950/75 border border-white/[0.06] space-y-1.5"
                 >
-                  <span className="font-mono text-[10px] text-cyan-300">{item.step}</span>
-                  <div className="text-xs font-semibold text-white">{item.title}</div>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed">{item.desc}</p>
+                  <div className="text-[10px] font-mono text-indigo-400">{item.step}</div>
+                  <div className="text-xs font-semibold text-zinc-200">{item.title}</div>
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">{item.desc}</p>
                 </div>
               ))}
             </div>
-          </motion.div>
-        )}
-
-        {/* TAB 3: SEND INVITE COMPOSER */}
-        {activeTab === 'send' && (
-          <motion.div
-            key="tab-send"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.16 }}
-            className="cp-panel rounded-2xl p-6 sm:p-8 space-y-6"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/[0.07]">
-              <div>
-                <h2 className="text-base sm:text-lg font-semibold text-white">
-                  {L('Undang Rekan Tim ke Proyek', 'Invite Teammates to a Project')}
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {L(
-                    'Kirim undangan langsung ke akun tertentu atau buat tautan berbagi untuk grup/komunitas.',
-                    'Send a direct invite to a specific user or generate a shareable invite link for your team.',
-                  )}
-                </p>
-              </div>
-              {sent.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('sent')}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-300 hover:text-indigo-200 transition cursor-pointer whitespace-nowrap"
-                >
-                  <span>
-                    {L(`Lihat ${sent.length} Riwayat Terkirim`, `View ${sent.length} Sent History`)}
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {leadWorkspaces.length === 0 ? (
-              <div className="p-8 rounded-xl bg-zinc-950/75 border border-dashed border-white/10 text-center space-y-2">
-                <Users className="w-6 h-6 text-zinc-500 mx-auto" />
-                <div className="text-sm font-medium text-zinc-300">
-                  {L('Belum ada proyek yang Anda pimpin', 'No projects where you are Project Lead')}
-                </div>
-                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                  {L(
-                    'Buat atau pimpin workspace proyek terlebih dahulu untuk mengirim undangan tim.',
-                    'Create or lead a project workspace first to send team invitations.',
-                  )}
-                </p>
-              </div>
-            ) : (
-              <div className="max-w-3xl space-y-5">
-                {/* Workspace selector */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      {L('Pilih Workspace Proyek', 'Select Project Workspace')}
-                    </label>
-                    <select
-                      value={effectiveSendWorkspaceId}
-                      onChange={(e) => setSendWorkspaceId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-white/12 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    >
-                      {leadWorkspaces.map((ws) => (
-                        <option key={ws.id} value={ws.id}>
-                          {ws.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      {L('@username atau Email Rekan Tim', 'Teammate @username or Email')}
-                    </label>
-                    <input
-                      type="text"
-                      value={sendTarget}
-                      onChange={(e) => setSendTarget(e.target.value)}
-                      placeholder={L(
-                        '@handle-github atau rekan@email.com',
-                        '@github-handle or teammate@email.com',
-                      )}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-white/12 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Role selector cards */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-zinc-300">
-                    {L('Peran yang Diberikan', 'Assigned Role')}
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSendRole('member')}
-                      className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
-                        sendRole === 'member'
-                          ? 'bg-cyan-500/10 border-cyan-500/40'
-                          : 'bg-zinc-950/75 border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>{L('Kontributor (Anggota)', 'Contributor (Member)')}</span>
-                        </span>
-                        {sendRole === 'member' && (
-                          <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 mt-1">
-                        {L(
-                          'Mengelola kartu Kanban, push branch fitur #CP-XX, dan siar Live IDE.',
-                          'Manage Kanban cards, push #CP-XX feature branches, and stream Live IDE.',
-                        )}
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSendRole('leader')}
-                      className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
-                        sendRole === 'leader'
-                          ? 'bg-indigo-500/12 border-indigo-500/45'
-                          : 'bg-zinc-950/75 border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                          <Shield className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>Project Lead</span>
-                        </span>
-                        {sendRole === 'leader' && (
-                          <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 mt-1">
-                        {L(
-                          'Akses penuh: Gatekeeper merge ke main, deploy Vercel, dan kelola anggota.',
-                          'Full access: Gatekeeper merge to main, Vercel deploys, and member governance.',
-                        )}
-                      </p>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Optional note */}
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                    {L('Catatan Sambutan (Opsional)', 'Welcome Note (Optional)')}
-                  </label>
-                  <input
-                    type="text"
-                    value={sendMessage}
-                    onChange={(e) => setSendMessage(e.target.value)}
-                    placeholder={L(
-                      'Mis. Halo, silakan gabung untuk mengerjakan modul autentikasi!',
-                      'e.g. Hey, join us to work on the authentication module!',
-                    )}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-white/12 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                  <button
-                    type="button"
-                    disabled={sendingInvite || !sendTarget.trim()}
-                    onClick={() => void handleSendInvite(false)}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg transition cursor-pointer disabled:opacity-45"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>
-                      {sendingInvite
-                        ? L('Mengirim...', 'Sending...')
-                        : L('Kirim Undangan Langsung', 'Send Direct Invitation')}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={sendingInvite}
-                    onClick={() => void handleSendInvite(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/12 text-zinc-100 text-xs font-medium transition cursor-pointer disabled:opacity-45"
-                  >
-                    <Link2 className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>{L('Buat Tautan Berbagi', 'Generate Shareable Link')}</span>
-                  </button>
-                </div>
-
-                {/* Instant created confirmation banner */}
-                {lastCreatedInvite && (
-                  <div className="p-4 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/25 flex flex-wrap items-center justify-between gap-3">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>
-                          {L('Undangan siap dibagikan!', 'Invitation ready to share!')}
-                        </span>
-                      </div>
-                      <div className="font-mono text-[11px] text-zinc-300 truncate">
-                        {lastCreatedInvite.workspaceName} •{' '}
-                        <span className="text-cyan-300">{lastCreatedInvite.inviteCode}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          copyText(
-                            `banner-${lastCreatedInvite.id}`,
-                            buildInviteUrl(lastCreatedInvite.inviteCode),
-                            L('Tautan undangan', 'Invite link'),
-                          )
-                        }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-[11px] font-medium text-white cursor-pointer"
-                      >
-                        {copiedId === `banner-${lastCreatedInvite.id}` ? (
-                          <Check className="w-3 h-3 text-emerald-400" />
-                        ) : (
-                          <Copy className="w-3 h-3 text-cyan-400" />
-                        )}
-                        <span>{L('Salin Tautan', 'Copy Link')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('sent')}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-[11px] font-semibold cursor-pointer"
-                      >
-                        {L('Lihat Riwayat', 'View History')}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* TAB 4: SENT INVITATIONS HISTORY */}
-        {activeTab === 'sent' && (
-          <motion.div
-            key="tab-sent"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.16 }}
-            className="cp-panel rounded-2xl p-6 sm:p-7 space-y-5"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.07]">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  {L('Riwayat Undangan Terkirim', 'Sent Invitations History')}
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {L(
-                    'Pantau status undangan, salin ulang tautan, atau cabut undangan yang masih tertunda.',
-                    'Track invite status, copy links again, or revoke pending invitations.',
-                  )}
-                </p>
-              </div>
-
-              {/* Filter pills */}
-              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-zinc-950/90 border border-white/10 self-start sm:self-auto">
-                {(
-                  [
-                    { id: 'all', label: L('Semua', 'All') },
-                    { id: 'pending', label: L('Tertunda', 'Pending') },
-                    { id: 'accepted', label: L('Diterima', 'Accepted') },
-                    { id: 'closed', label: L('Ditutup', 'Closed') },
-                  ] as const
-                ).map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setSentFilter(f.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer whitespace-nowrap ${
-                      sentFilter === f.id
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {refreshing ? (
-              <InvitationsListSkeleton count={3} />
-            ) : filteredSent.length === 0 ? (
-              <div className="py-12 px-6 rounded-xl bg-zinc-950/60 border border-dashed border-white/10 text-center space-y-3">
-                <Clock className="w-6 h-6 text-zinc-600 mx-auto" />
-                <div className="text-sm font-medium text-zinc-300">
-                  {sent.length === 0
-                    ? L('Belum ada undangan terkirim', 'No sent invitations yet')
-                    : L('Tidak ada undangan pada filter ini', 'No invitations match this filter')}
-                </div>
-                {sent.length === 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('send')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition cursor-pointer"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{L('Kirim Undangan Pertama', 'Send First Invitation')}</span>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="divide-y divide-white/[0.06] rounded-xl bg-zinc-950/80 border border-white/8 overflow-hidden">
-                {filteredSent.map((inv) => {
-                  const isOpenLink = !inv.inviteeUsername && !inv.inviteeEmail;
-                  return (
-                    <div
-                      key={inv.id}
-                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white/[0.02] transition"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="font-semibold text-white">{inv.workspaceName}</span>
-                          <span className="text-zinc-600">→</span>
-                          <span className="font-mono text-zinc-200">
-                            {isOpenLink
-                              ? L('Tautan Berbagi Terbuka', 'Open Shareable Link')
-                              : inv.inviteeUsername
-                                ? `@${inv.inviteeUsername}`
-                                : inv.inviteeEmail}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
-                          <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
-                            {inv.inviteCode}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 uppercase text-[10px]">
-                            {inv.role === 'leader' ? 'Project Lead' : L('Kontributor', 'Contributor')}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded border uppercase text-[10px] whitespace-nowrap ${
-                              inv.status === 'pending'
-                                ? 'bg-amber-500/10 border-amber-500/25 text-amber-300'
-                                : inv.status === 'accepted'
-                                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
-                                  : 'bg-zinc-800/80 border-white/10 text-zinc-400'
-                            }`}
-                          >
-                            {formatInviteStatus(inv.status)}
-                          </span>
-                          <span className="text-zinc-500 text-[10px]">
-                            {new Date(inv.createdAt).toLocaleDateString(
-                              locale === 'id' ? 'id-ID' : 'en-US',
-                            )}
-                          </span>
-                        </div>
-                      </div>
-
-                      {inv.status === 'pending' && (
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              copyText(
-                                `code-${inv.id}`,
-                                inv.inviteCode,
-                                L('Kode undangan', 'Invite code'),
-                              )
-                            }
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-[11px] font-mono text-zinc-300 cursor-pointer whitespace-nowrap"
-                          >
-                            {copiedId === `code-${inv.id}` ? (
-                              <Check className="w-3 h-3 text-emerald-400" />
-                            ) : (
-                              <Copy className="w-3 h-3 text-zinc-400" />
-                            )}
-                            <span>{L('Kode', 'Code')}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              copyText(
-                                inv.id,
-                                buildInviteUrl(inv.inviteCode),
-                                L('Tautan undangan', 'Invite link'),
-                              )
-                            }
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-100 cursor-pointer whitespace-nowrap"
-                          >
-                            {copiedId === inv.id ? (
-                              <Check className="w-3 h-3 text-emerald-400" />
-                            ) : (
-                              <Link2 className="w-3 h-3 text-cyan-400" />
-                            )}
-                            <span>{L('Salin Tautan', 'Copy Link')}</span>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={respondingId === inv.id}
-                            onClick={() => void handleRevoke(inv.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/25 text-[11px] transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                            title={L('Cabut undangan', 'Revoke invitation')}
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">{L('Cabut', 'Revoke')}</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
