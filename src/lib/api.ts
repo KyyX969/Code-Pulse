@@ -99,6 +99,11 @@ export const api = {
       method: 'DELETE',
     }),
 
+  leaveWorkspace: (workspaceId: string) =>
+    request<{ ok: boolean; leftWorkspaceId: string }>(`/api/workspaces/${workspaceId}/leave`, {
+      method: 'POST',
+    }),
+
   listGitHubRepos: () =>
     request<{ repos: GitHubRepoItem[]; source: string; message?: string }>(
       '/api/workspaces/integrations/github-repos',

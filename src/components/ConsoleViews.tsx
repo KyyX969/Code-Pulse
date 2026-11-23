@@ -13,6 +13,7 @@ import {
   GitMerge,
   Layers,
   Lock,
+  LogOut,
   Pencil,
   PieChart,
   Plus,
@@ -1449,6 +1450,9 @@ function ProjectsDirectorySection({
   const [deletingWs, setDeletingWs] = useState<Workspace | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [leavingWs, setLeavingWs] = useState<Workspace | null>(null);
+  const [leaving, setLeaving] = useState(false);
+
   const filtered = workspaces.filter((ws) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -1520,6 +1524,34 @@ function ProjectsDirectorySection({
     }
   }
 
+  async function handleConfirmLeave() {
+    if (!leavingWs) return;
+    setLeaving(true);
+    try {
+      await api.leaveWorkspace(leavingWs.id);
+      const leftName = leavingWs.name;
+      const leftId = leavingWs.id;
+      setLeavingWs(null);
+      onWorkspaceDeleted(leftId);
+      onToast(
+        'info',
+        L(
+          `Anda telah keluar dari proyek "${leftName}".`,
+          `You have left project "${leftName}".`,
+        ),
+      );
+    } catch (err) {
+      onToast(
+        'error',
+        err instanceof Error
+          ? err.message
+          : L('Gagal keluar dari proyek', 'Failed to leave project'),
+      );
+    } finally {
+      setLeaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1575,6 +1607,7 @@ function ProjectsDirectorySection({
           {filtered.map((ws) => {
             const projectRole = getWorkspaceMemberRole(ws, currentUser);
             const isLead = projectRole === 'leader';
+            const isOwner = ws.ownerId === currentUser.id;
             return (
               <div
                 key={ws.id}
@@ -1612,6 +1645,16 @@ function ProjectsDirectorySection({
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </>
+                      )}
+                      {!isOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setLeavingWs(ws)}
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-amber-500/15 border border-white/10 hover:border-amber-500/35 text-zinc-400 hover:text-amber-300 transition cursor-pointer"
+                          title={L(`Keluar dari ${ws.name}`, `Leave ${ws.name}`)}
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1814,6 +1857,68 @@ function ProjectsDirectorySection({
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer disabled:opacity-45"
               >
                 {deleting ? L('Menghapus...', 'Deleting...') : L('Hapus Proyek', 'Delete Project')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Project Confirmation Modal */}
+      {leavingWs && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[#10121a] border border-amber-500/30 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-amber-300 flex items-center gap-2">
+                <LogOut className="w-4 h-4" />
+                <span>{L('Keluar dari Proyek', 'Leave Project')}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLeavingWs(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              {locale === 'id' ? (
+                <>
+                  Apakah Anda yakin ingin keluar dari{' '}
+                  <strong className="text-white">{leavingWs.name}</strong>? Anda tidak lagi dapat
+                  mengakses Papan Kanban, Gatekeeper, atau Deployment proyek ini sampai diundang
+                  kembali oleh Project Lead.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to leave{' '}
+                  <strong className="text-white">{leavingWs.name}</strong>? You will lose access to
+                  its Kanban board, Gatekeeper, and Deployments until re-invited by a Project Lead.
+                </>
+              )}
+            </p>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              {L(
+                'Proyek, riwayat tugas, dan anggota lain tetap aman tidak terpengaruh.',
+                'The project, task history, and other team members will remain unaffected.',
+              )}
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setLeavingWs(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-xs text-zinc-300 cursor-pointer"
+              >
+                {L('Batal', 'Cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={leaving}
+                onClick={() => void handleConfirmLeave()}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-semibold cursor-pointer disabled:opacity-45"
+              >
+                {leaving ? L('Keluar...', 'Leaving...') : L('Ya, Keluar Proyek', 'Yes, Leave Project')}
               </button>
             </div>
           </div>

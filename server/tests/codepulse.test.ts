@@ -405,6 +405,50 @@ describe('CodePulse Core & API Integration', () => {
         expect(loginLocation).toContain('auth_error=github_oauth_not_configured');
       }
     });
+
+    it('allows non-owner members to leave a workspace while preventing owner from leaving', async () => {
+      const ownedRes = await leaderAgent.post('/api/workspaces').send({
+        name: 'Leave Flow Workspace',
+        description: 'Testing owner safeguard and contributor exit',
+      });
+      expect(ownedRes.status).toBe(201);
+      const ownedWorkspaceId = ownedRes.body.workspace.id as string;
+
+      // Owner cannot leave their own workspace
+      const ownerLeave = await leaderAgent.post(`/api/workspaces/${ownedWorkspaceId}/leave`);
+      expect(ownerLeave.status).toBe(400);
+
+      // Invite and join a fresh contributor, then let them leave
+      const inviteRes = await leaderAgent
+        .post(`/api/workspaces/${ownedWorkspaceId}/invitations`)
+        .send({ role: 'member', message: 'Temporary member' });
+      expect(inviteRes.status).toBe(201);
+      const code = inviteRes.body.invitation.inviteCode as string;
+
+      const leaverAgent = request.agent(app);
+      const regRes = await leaverAgent.post('/api/auth/register').send({
+        email: 'leaver@codepulse.dev',
+        password: 'password123',
+        username: 'temp-leaver',
+        displayName: 'Temp Leaver',
+        role: 'member',
+      });
+      expect(regRes.status).toBe(201);
+
+      const joinRes = await leaverAgent.post('/api/invitations/join').send({ code });
+      expect(joinRes.status).toBe(200);
+
+      const leaveRes = await leaverAgent.post(`/api/workspaces/${ownedWorkspaceId}/leave`);
+      expect(leaveRes.status).toBe(200);
+      expect(leaveRes.body.leftWorkspaceId).toBe(ownedWorkspaceId);
+
+      // Leaver no longer sees the workspace
+      const listAfter = await leaverAgent.get('/api/workspaces');
+      expect(listAfter.status).toBe(200);
+      expect(
+        listAfter.body.workspaces.some((w: { id: string }) => w.id === ownedWorkspaceId),
+      ).toBe(false);
+    });
   });
 });
 

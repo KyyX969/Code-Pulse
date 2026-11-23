@@ -153,6 +153,38 @@ workspacesRouter.delete('/:id', requireWorkspaceLeader, async (req, res) => {
   res.json({ ok: true, deletedId: workspaceId });
 });
 
+workspacesRouter.post('/:id/leave', requireAuth, async (req, res) => {
+  const workspaceId = String(req.params.id);
+  const userId = req.currentUser!.id;
+  const store = await getStore();
+  const ws = await store.getWorkspaceById(workspaceId);
+  if (!ws) {
+    res.status(404).json({ error: 'Workspace not found' });
+    return;
+  }
+  if (ws.ownerId === userId) {
+    res.status(400).json({
+      error: 'Project owner cannot leave their own project. Delete the project instead.',
+    });
+    return;
+  }
+  const isMember = ws.members.some((m) => m.userId === userId);
+  if (!isMember) {
+    res.status(403).json({ error: 'You are not a member of this workspace' });
+    return;
+  }
+
+  const updated = await store.removeWorkspaceMember(workspaceId, userId);
+  if (updated) {
+    realtimeHub.broadcastToWorkspace(updated.id, {
+      type: 'workspace:updated',
+      workspace: toPublicWorkspace(updated),
+    });
+  }
+
+  res.json({ ok: true, leftWorkspaceId: workspaceId });
+});
+
 workspacesRouter.post('/:id/connect-repo', requireWorkspaceLeader, async (req, res) => {
   const { owner, repo, repoId, defaultBranch, enableProtection } = req.body as {
     owner?: string;

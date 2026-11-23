@@ -7,6 +7,7 @@ import {
   KeyRound,
   Link2,
   Lock,
+  LogOut,
   Pencil,
   Save,
   Trash2,
@@ -51,6 +52,8 @@ export function SettingsPanel({
   const [savingGeneral, setSavingGeneral] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [leavingProject, setLeavingProject] = useState(false);
 
   const [ghOwner, setGhOwner] = useState(workspace.githubOwner || '');
   const [ghRepo, setGhRepo] = useState(workspace.githubRepo || '');
@@ -78,6 +81,7 @@ export function SettingsPanel({
   }, [currentUser.githubConnected]);
 
   const isLeader = isWorkspaceLeader(workspace, currentUser);
+  const isOwner = workspace.ownerId === currentUser.id;
   const webhookUrl = `${window.location.origin}/api/webhooks/github`;
 
   async function handleConnectRepo(e: React.FormEvent) {
@@ -226,6 +230,30 @@ export function SettingsPanel({
         err instanceof Error ? err.message : L('Gagal menghapus proyek', 'Failed to delete project'),
       );
       setDeletingProject(false);
+    }
+  }
+
+  async function handleLeaveProject() {
+    if (isOwner) return;
+    setLeavingProject(true);
+    try {
+      await api.leaveWorkspace(workspace.id);
+      onToast(
+        'info',
+        L(
+          `Anda telah keluar dari proyek "${workspace.name}".`,
+          `You have left project "${workspace.name}".`,
+        ),
+      );
+      onWorkspaceDeleted?.(workspace.id);
+    } catch (err) {
+      onToast(
+        'error',
+        err instanceof Error
+          ? err.message
+          : L('Gagal keluar dari proyek', 'Failed to leave project'),
+      );
+      setLeavingProject(false);
     }
   }
 
@@ -590,35 +618,50 @@ export function SettingsPanel({
           </button>
         </form>
 
-        <div className="lg:col-span-5 cp-panel rounded-2xl p-6 border border-rose-500/25 flex flex-col justify-between gap-4">
-          <div className="space-y-2">
-            <h3 className="text-base font-semibold text-rose-300 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              <span>{L('Zona Berbahaya', 'Danger Zone')}</span>
-            </h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              {L('Menghapus ', 'Deleting ')}
-              <strong className="text-zinc-200">{workspace.name}</strong>{' '}
-              {L(
-                'akan menghapus Papan Kanban, log Gatekeeper, riwayat deployment, dan undangan dari CodePulse. Repository GitHub dan proyek Vercel Anda tetap aman tidak tersentuh.',
-                'removes its Kanban board, Gatekeeper logs, deployment history, and invitations from CodePulse. Your GitHub repository and Vercel project remain untouched.',
-              )}
-            </p>
-          </div>
+        <div
+          className={`lg:col-span-5 cp-panel rounded-2xl p-6 border flex flex-col justify-between gap-4 ${
+            !isOwner && !isLeader ? 'border-amber-500/25' : 'border-rose-500/25'
+          }`}
+        >
+          {isLeader ? (
+            <>
+              <div className="space-y-2">
+                <h3 className="text-base font-semibold text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>{L('Zona Berbahaya', 'Danger Zone')}</span>
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  {L('Menghapus ', 'Deleting ')}
+                  <strong className="text-zinc-200">{workspace.name}</strong>{' '}
+                  {L(
+                    'akan menghapus Papan Kanban, log Gatekeeper, riwayat deployment, dan undangan dari CodePulse. Repository GitHub dan proyek Vercel Anda tetap aman tidak tersentuh.',
+                    'removes its Kanban board, Gatekeeper logs, deployment history, and invitations from CodePulse. Your GitHub repository and Vercel project remain untouched.',
+                  )}
+                </p>
+              </div>
 
-          {!confirmingDelete ? (
-            <div>
-              <button
-                type="button"
-                disabled={!isLeader}
-                onClick={() => setConfirmingDelete(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/12 hover:bg-rose-500/20 border border-rose-500/35 text-rose-300 text-xs font-semibold transition cursor-pointer disabled:opacity-45"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{L('Hapus Workspace Proyek', 'Delete Project Workspace')}</span>
-              </button>
-            </div>
-          ) : (
+              {!confirmingDelete ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/12 hover:bg-rose-500/20 border border-rose-500/35 text-rose-300 text-xs font-semibold transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{L('Hapus Workspace Proyek', 'Delete Project Workspace')}</span>
+                  </button>
+                  {!isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingLeave(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/12 hover:bg-amber-500/20 border border-amber-500/35 text-amber-300 text-xs font-semibold transition cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>{L('Keluar dari Proyek', 'Leave Project')}</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-2.5">
               <div className="text-xs text-rose-200 font-medium">
                 {L(
@@ -647,6 +690,98 @@ export function SettingsPanel({
                 </button>
               </div>
             </div>
+          )}
+
+              {!isOwner && confirmingLeave && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
+                  <div className="text-xs text-amber-200 font-medium">
+                    {L(
+                      `Keluar dari workspace "${workspace.name}"?`,
+                      `Leave workspace "${workspace.name}"?`,
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={leavingProject}
+                      onClick={() => void handleLeaveProject()}
+                      className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-semibold cursor-pointer disabled:opacity-45"
+                    >
+                      {leavingProject
+                        ? L('Keluar...', 'Leaving...')
+                        : L('Ya, Keluar Proyek', 'Yes, Leave Project')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={leavingProject}
+                      onClick={() => setConfirmingLeave(false)}
+                      className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-xs text-zinc-300 cursor-pointer"
+                    >
+                      {L('Batal', 'Cancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <h3 className="text-base font-semibold text-amber-300 flex items-center gap-2">
+                  <LogOut className="w-4 h-4" />
+                  <span>{L('Keluar dari Proyek', 'Leave Project')}</span>
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  {L('Keluar dari ', 'Leaving ')}
+                  <strong className="text-zinc-200">{workspace.name}</strong>{' '}
+                  {L(
+                    'akan menghapus proyek ini dari daftar workspace Anda. Proyek, tugas, dan anggota lain tetap aman — Anda dapat bergabung kembali nanti lewat undangan baru.',
+                    'removes this project from your workspace list. The project, tasks, and other members remain untouched — you can rejoin later with a new invite.',
+                  )}
+                </p>
+              </div>
+
+              {!confirmingLeave ? (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingLeave(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/12 hover:bg-amber-500/20 border border-amber-500/35 text-amber-300 text-xs font-semibold transition cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{L('Keluar dari Proyek', 'Leave Project')}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
+                  <div className="text-xs text-amber-200 font-medium">
+                    {L(
+                      `Konfirmasi keluar dari "${workspace.name}"?`,
+                      `Confirm leaving "${workspace.name}"?`,
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={leavingProject}
+                      onClick={() => void handleLeaveProject()}
+                      className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-semibold cursor-pointer disabled:opacity-45"
+                    >
+                      {leavingProject
+                        ? L('Keluar...', 'Leaving...')
+                        : L('Ya, Keluar Proyek', 'Yes, Leave Project')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={leavingProject}
+                      onClick={() => setConfirmingLeave(false)}
+                      className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-xs text-zinc-300 cursor-pointer"
+                    >
+                      {L('Batal', 'Cancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
