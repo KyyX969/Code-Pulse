@@ -37,7 +37,7 @@ interface StreamPreset {
   fps: number;
   maxBitrate: number;
   contentHint: 'detail' | 'motion';
-  degradationPreference: 'maintain-resolution' | 'balanced';
+  degradationPreference: 'maintain-resolution' | 'maintain-framerate' | 'balanced';
 }
 
 const STREAM_PRESETS: Record<StreamPresetId, StreamPreset> = {
@@ -50,7 +50,7 @@ const STREAM_PRESETS: Record<StreamPresetId, StreamPreset> = {
     fps: 60,
     maxBitrate: 6_000_000,
     contentHint: 'motion',
-    degradationPreference: 'balanced',
+    degradationPreference: 'maintain-framerate',
   },
   crisp_30: {
     id: 'crisp_30',
@@ -76,6 +76,44 @@ const STREAM_PRESETS: Record<StreamPresetId, StreamPreset> = {
   },
 };
 
+function boostVideoSdpBitrate(sdp: string | undefined, maxBps: number): string | undefined {
+  if (!sdp) return sdp;
+  const maxKbps = Math.max(500, Math.round(maxBps / 1000));
+  const startKbps = Math.min(maxKbps, Math.round(maxKbps * 0.6));
+  const lines = sdp.split(/\r?\n/);
+  const out: string[] = [];
+  let inVideo = false;
+  let injectedBand = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('m=video')) {
+      inVideo = true;
+      injectedBand = false;
+      out.push(line);
+      continue;
+    }
+    if (line.startsWith('m=') && !line.startsWith('m=video')) {
+      inVideo = false;
+    }
+    if (inVideo && line.startsWith('b=AS:')) {
+      out.push(`b=AS:${maxKbps}`);
+      injectedBand = true;
+      continue;
+    }
+    out.push(line);
+    if (inVideo && !injectedBand && line.startsWith('c=IN')) {
+      out.push(`b=AS:${maxKbps}`);
+      injectedBand = true;
+    }
+    if (inVideo && line.startsWith('a=fmtp:') && !line.includes('x-google-max-bitrate')) {
+      out[out.length - 1] =
+        `${line};x-google-max-bitrate=${maxKbps};x-google-start-bitrate=${startKbps}`;
+    }
+  }
+  return out.join('\r\n');
+}
+
 async function applySenderEncodingPreset(
   sender: RTCRtpSender,
   preset: StreamPreset,
@@ -90,12 +128,35 @@ async function applySenderEncodingPreset(
       ...params.encodings[0],
       maxBitrate: preset.maxBitrate,
       maxFramerate: preset.fps,
+      scaleResolutionDownBy: 1,
+      priority: 'high',
     };
     params.degradationPreference = preset.degradationPreference;
     await sender.setParameters(params);
   } catch {
     // Some browsers disallow certain parameter fields depending on codec/state
   }
+}
+
+interface ScreenMeta {
+  targetFps?: number;
+  targetResolution?: string;
+  presetId?: StreamPresetId;
+}
+
+interface ScreenOfferPayload extends ScreenMeta {
+  offerId?: string;
+  sdp?: RTCSessionDescriptionInit;
+  // Backward-compatible direct RTCSessionDescriptionInit fields
+  type?: RTCSdpType;
+}
+
+interface ScreenIcePayload {
+  candidate?: RTCIceCandidateInit;
+  fromRole?: 'broadcaster' | 'viewer';
+  // Backward-compatible direct RTCIceCandidateInit fields
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
 }
 
 interface LiveMonitorPanelProps {
@@ -110,9 +171,14 @@ interface LiveMonitorPanelProps {
 
 interface RemoteStreamEntry {
   userId: string;
-  stream: MediaStream;
+  stream: MediaStream | null;
   fps: number | null;
+  resolution: string | null;
+  targetFps: number | null;
+  targetResolution: string | null;
   kbps: number | null;
+  framesDecoded: number;
+  videoPlaying: boolean;
   connectionState: string;
 }
 
@@ -144,9 +210,13 @@ export function LiveMonitorPanel({
   });
 
   const localStreamRef = useRef<MediaStream | null>(null);
+  const localMetricsRef = useRef<{ fps?: number; resolution?: string }>({});
   const presetRef = useRef<StreamPreset>(STREAM_PRESETS.smooth_60);
   const broadcasterPeersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const viewerPeersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const pendingBroadcasterIceRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const pendingViewerIceRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const handledOfferIdsRef = useRef<Map<string, string>>(new Map());
   const prevBytesRef = useRef<Map<string, { bytes: number; ts: number }>>(new Map());
 
   const activePreset = STREAM_PRESETS[presetId];
@@ -223,6 +293,7 @@ export function LiveMonitorPanel({
 
       const existing = broadcasterPeersRef.current.get(viewerUserId);
       if (existing) existing.close();
+      pendingBroadcasterIceRef.current.delete(viewerUserId);
 
       const pc = new RTCPeerConnection({ iceServers });
       broadcasterPeersRef.current.set(viewerUserId, pc);
@@ -234,6 +305,14 @@ export function LiveMonitorPanel({
         }
       }
 
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          for (const sender of pc.getSenders()) {
+            void applySenderEncodingPreset(sender, presetRef.current);
+          }
+        }
+      };
+
       pc.onicecandidate = (ev) => {
         if (ev.candidate) {
           realtimeClient.sendRtcSignal({
@@ -241,20 +320,36 @@ export function LiveMonitorPanel({
             fromUserId: currentUser.id,
             toUserId: viewerUserId,
             signalType: 'ice-candidate',
-            payload: ev.candidate.toJSON(),
+            payload: {
+              candidate: ev.candidate.toJSON(),
+              fromRole: 'broadcaster',
+            } satisfies ScreenIcePayload,
           });
         }
       };
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      const rawOffer = await pc.createOffer();
+      const boostedOffer: RTCSessionDescriptionInit = {
+        type: rawOffer.type,
+        sdp: boostVideoSdpBitrate(rawOffer.sdp, presetRef.current.maxBitrate),
+      };
+      await pc.setLocalDescription(boostedOffer);
 
+      const offerId = `${currentUser.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const currentMeta = localMetricsRef.current;
       realtimeClient.sendRtcSignal({
         workspaceId: workspace.id,
         fromUserId: currentUser.id,
         toUserId: viewerUserId,
         signalType: 'offer',
-        payload: offer,
+        payload: {
+          offerId,
+          sdp: boostedOffer,
+          targetFps: currentMeta.fps || presetRef.current.fps,
+          targetResolution:
+            currentMeta.resolution || `${presetRef.current.width}x${presetRef.current.height}`,
+          presetId: presetRef.current.id,
+        } satisfies ScreenOfferPayload,
       });
     },
     [currentUser.id, iceServers, workspace.id],
@@ -262,6 +357,23 @@ export function LiveMonitorPanel({
 
   // Listen for WebRTC signaling messages over WebSocket / Supabase Realtime
   useEffect(() => {
+    const flushIce = async (
+      pc: RTCPeerConnection,
+      queueMap: Map<string, RTCIceCandidateInit[]>,
+      peerId: string,
+    ) => {
+      const queued = queueMap.get(peerId);
+      if (!queued || queued.length === 0) return;
+      queueMap.delete(peerId);
+      for (const init of queued) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(init));
+        } catch {
+          // ignore stale candidate
+        }
+      }
+    };
+
     const unsubscribe = realtimeClient.subscribe((msg: RealtimeServerMessage) => {
       if (msg.type !== 'rtc:signal' || msg.workspaceId !== workspace.id) return;
       if (msg.fromUserId === currentUser.id) return;
@@ -277,6 +389,35 @@ export function LiveMonitorPanel({
       }
 
       if (msg.signalType === 'broadcaster-ready') {
+        const meta = (msg.payload || {}) as {
+          fps?: number;
+          resolution?: string;
+          updateOnly?: boolean;
+        };
+
+        if (meta.fps || meta.resolution) {
+          setRemoteStreams((prev) => {
+            const cur = prev[peerUserId];
+            return {
+              ...prev,
+              [peerUserId]: {
+                userId: peerUserId,
+                stream: cur?.stream ?? null,
+                fps: cur?.fps ?? null,
+                resolution: cur?.resolution ?? null,
+                targetFps: meta.fps ?? cur?.targetFps ?? null,
+                targetResolution: meta.resolution ?? cur?.targetResolution ?? null,
+                kbps: cur?.kbps ?? null,
+                framesDecoded: cur?.framesDecoded ?? 0,
+                videoPlaying: cur?.videoPlaying ?? false,
+                connectionState: cur?.connectionState ?? 'connecting',
+              },
+            };
+          });
+        }
+
+        if (meta.updateOnly) return;
+
         void api
           .listLiveSessions(workspace.id)
           .then((res) => onSessionsChange(res.sessions))
@@ -297,6 +438,8 @@ export function LiveMonitorPanel({
           vp.close();
           viewerPeersRef.current.delete(peerUserId);
         }
+        pendingViewerIceRef.current.delete(peerUserId);
+        handledOfferIdsRef.current.delete(peerUserId);
         setRemoteStreams((prev) => {
           if (!prev[peerUserId]) return prev;
           const copy = { ...prev };
@@ -311,84 +454,160 @@ export function LiveMonitorPanel({
       }
 
       if (msg.signalType === 'offer') {
+        const rawPayload = msg.payload as ScreenOfferPayload | null;
+        if (!rawPayload) return;
+
+        const offerSdp: RTCSessionDescriptionInit | null = rawPayload.sdp
+          ? rawPayload.sdp
+          : rawPayload.type
+            ? (rawPayload as unknown as RTCSessionDescriptionInit)
+            : null;
+        if (!offerSdp) return;
+
+        if (rawPayload.offerId && handledOfferIdsRef.current.get(peerUserId) === rawPayload.offerId) {
+          return;
+        }
+
         void (async () => {
-          const existing = viewerPeersRef.current.get(peerUserId);
-          if (existing) existing.close();
-
-          const pc = new RTCPeerConnection({ iceServers });
-          viewerPeersRef.current.set(peerUserId, pc);
-
-          pc.onicecandidate = (ev) => {
-            if (ev.candidate) {
-              realtimeClient.sendRtcSignal({
-                workspaceId: workspace.id,
-                fromUserId: currentUser.id,
-                toUserId: peerUserId,
-                signalType: 'ice-candidate',
-                payload: ev.candidate.toJSON(),
-              });
+          try {
+            const existing = viewerPeersRef.current.get(peerUserId);
+            if (existing) existing.close();
+            if (rawPayload.offerId) {
+              handledOfferIdsRef.current.set(peerUserId, rawPayload.offerId);
             }
-          };
 
-          pc.onconnectionstatechange = () => {
-            setRemoteStreams((prev) => {
-              const cur = prev[peerUserId];
-              if (!cur) return prev;
-              return {
+            const pc = new RTCPeerConnection({ iceServers });
+            viewerPeersRef.current.set(peerUserId, pc);
+
+            pc.onicecandidate = (ev) => {
+              if (ev.candidate) {
+                realtimeClient.sendRtcSignal({
+                  workspaceId: workspace.id,
+                  fromUserId: currentUser.id,
+                  toUserId: peerUserId,
+                  signalType: 'ice-candidate',
+                  payload: {
+                    candidate: ev.candidate.toJSON(),
+                    fromRole: 'viewer',
+                  } satisfies ScreenIcePayload,
+                });
+              }
+            };
+
+            const syncConnState = () => {
+              const state =
+                pc.connectionState === 'connected' || pc.iceConnectionState === 'connected'
+                  ? 'connected'
+                  : pc.connectionState === 'failed' || pc.iceConnectionState === 'failed'
+                    ? 'failed'
+                    : pc.connectionState;
+              setRemoteStreams((prev) => {
+                const cur = prev[peerUserId];
+                if (!cur) return prev;
+                return {
+                  ...prev,
+                  [peerUserId]: { ...cur, connectionState: state },
+                };
+              });
+            };
+
+            pc.onconnectionstatechange = syncConnState;
+            pc.oniceconnectionstatechange = syncConnState;
+
+            pc.ontrack = (ev) => {
+              const stream = ev.streams[0] ?? new MediaStream([ev.track]);
+              setRemoteStreams((prev) => ({
                 ...prev,
-                [peerUserId]: { ...cur, connectionState: pc.connectionState },
-              };
+                [peerUserId]: {
+                  userId: peerUserId,
+                  stream,
+                  fps: prev[peerUserId]?.fps ?? null,
+                  resolution: prev[peerUserId]?.resolution ?? null,
+                  targetFps: rawPayload.targetFps ?? prev[peerUserId]?.targetFps ?? null,
+                  targetResolution:
+                    rawPayload.targetResolution ?? prev[peerUserId]?.targetResolution ?? null,
+                  kbps: prev[peerUserId]?.kbps ?? null,
+                  framesDecoded: prev[peerUserId]?.framesDecoded ?? 0,
+                  videoPlaying: prev[peerUserId]?.videoPlaying ?? false,
+                  connectionState: pc.connectionState,
+                },
+              }));
+            };
+
+            await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+            await flushIce(pc, pendingViewerIceRef.current, peerUserId);
+            const rawAnswer = await pc.createAnswer();
+            const answerDesc: RTCSessionDescriptionInit = {
+              type: rawAnswer.type,
+              sdp: boostVideoSdpBitrate(rawAnswer.sdp, 6_000_000),
+            };
+            await pc.setLocalDescription(answerDesc);
+
+            realtimeClient.sendRtcSignal({
+              workspaceId: workspace.id,
+              fromUserId: currentUser.id,
+              toUserId: peerUserId,
+              signalType: 'answer',
+              payload: answerDesc,
             });
-          };
-
-          pc.ontrack = (ev) => {
-            const stream = ev.streams[0];
-            if (!stream) return;
-            setRemoteStreams((prev) => ({
-              ...prev,
-              [peerUserId]: {
-                userId: peerUserId,
-                stream,
-                fps: prev[peerUserId]?.fps ?? null,
-                kbps: prev[peerUserId]?.kbps ?? null,
-                connectionState: pc.connectionState,
-              },
-            }));
-          };
-
-          await pc.setRemoteDescription(
-            new RTCSessionDescription(msg.payload as RTCSessionDescriptionInit),
-          );
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-
-          realtimeClient.sendRtcSignal({
-            workspaceId: workspace.id,
-            fromUserId: currentUser.id,
-            toUserId: peerUserId,
-            signalType: 'answer',
-            payload: answer,
-          });
+          } catch {
+            // ignore transient glare / teardown errors
+          }
         })();
         return;
       }
 
       if (msg.signalType === 'answer') {
         const pc = broadcasterPeersRef.current.get(peerUserId);
-        if (pc) {
-          void pc.setRemoteDescription(
-            new RTCSessionDescription(msg.payload as RTCSessionDescriptionInit),
-          );
+        if (pc && pc.signalingState === 'have-local-offer') {
+          void (async () => {
+            try {
+              await pc.setRemoteDescription(
+                new RTCSessionDescription(msg.payload as RTCSessionDescriptionInit),
+              );
+              await flushIce(pc, pendingBroadcasterIceRef.current, peerUserId);
+              // Re-apply 60 FPS + bitrate ceiling after SDP negotiation finishes!
+              for (const sender of pc.getSenders()) {
+                await applySenderEncodingPreset(sender, presetRef.current);
+              }
+            } catch {
+              // ignore duplicate answer
+            }
+          })();
         }
         return;
       }
 
       if (msg.signalType === 'ice-candidate') {
-        const candidate = new RTCIceCandidate(msg.payload as RTCIceCandidateInit);
-        const bp = broadcasterPeersRef.current.get(peerUserId);
-        if (bp) void bp.addIceCandidate(candidate).catch(() => {});
-        const vp = viewerPeersRef.current.get(peerUserId);
-        if (vp) void vp.addIceCandidate(candidate).catch(() => {});
+        const rawIce = msg.payload as ScreenIcePayload | null;
+        if (!rawIce) return;
+        const candInit: RTCIceCandidateInit = rawIce.candidate
+          ? rawIce.candidate
+          : (rawIce as unknown as RTCIceCandidateInit);
+
+        const pushOrAdd = (
+          pc: RTCPeerConnection | undefined,
+          queueMap: Map<string, RTCIceCandidateInit[]>,
+        ) => {
+          if (pc && pc.remoteDescription) {
+            void pc.addIceCandidate(new RTCIceCandidate(candInit)).catch(() => {});
+          } else {
+            const list = queueMap.get(peerUserId) || [];
+            list.push(candInit);
+            queueMap.set(peerUserId, list);
+          }
+        };
+
+        // Route strictly by role when tagged so simultaneous bi-directional screen shares never collide!
+        if (rawIce.fromRole === 'broadcaster') {
+          pushOrAdd(viewerPeersRef.current.get(peerUserId), pendingViewerIceRef.current);
+        } else if (rawIce.fromRole === 'viewer') {
+          pushOrAdd(broadcasterPeersRef.current.get(peerUserId), pendingBroadcasterIceRef.current);
+        } else {
+          // Legacy fallback if remote peer is on older bundle
+          pushOrAdd(broadcasterPeersRef.current.get(peerUserId), pendingBroadcasterIceRef.current);
+          pushOrAdd(viewerPeersRef.current.get(peerUserId), pendingViewerIceRef.current);
+        }
       }
     });
 
@@ -426,19 +645,32 @@ export function LiveMonitorPanel({
     }
   }, [sessions, currentUser.id, workspace.id]);
 
-  // Poll WebRTC getStats() for live FPS & bitrate telemetry
+  // Poll WebRTC getStats() for live FPS, resolution, decoded frames & bitrate telemetry
   useEffect(() => {
     const interval = setInterval(async () => {
       for (const [broadcasterId, pc] of viewerPeersRef.current.entries()) {
         try {
           const stats = await pc.getStats();
           let fps: number | null = null;
+          let resolution: string | null = null;
           let kbps: number | null = null;
+          let framesDecoded = 0;
 
           stats.forEach((report) => {
             if (report.type === 'inbound-rtp' && report.kind === 'video') {
               if (typeof report.framesPerSecond === 'number') {
                 fps = Math.round(report.framesPerSecond);
+              }
+              if (
+                typeof report.frameWidth === 'number' &&
+                typeof report.frameHeight === 'number' &&
+                report.frameWidth > 0 &&
+                report.frameHeight > 0
+              ) {
+                resolution = `${report.frameWidth}x${report.frameHeight}`;
+              }
+              if (typeof report.framesDecoded === 'number') {
+                framesDecoded = report.framesDecoded;
               }
               if (typeof report.bytesReceived === 'number') {
                 const now = Date.now();
@@ -463,9 +695,14 @@ export function LiveMonitorPanel({
               ...prev,
               [broadcasterId]: {
                 ...cur,
-                fps: fps ?? cur.fps,
-                kbps: kbps ?? cur.kbps,
-                connectionState: pc.connectionState,
+                fps: fps !== null ? fps : cur.fps,
+                resolution: resolution ?? cur.resolution,
+                kbps: kbps !== null ? kbps : cur.kbps,
+                framesDecoded: Math.max(cur.framesDecoded, framesDecoded),
+                connectionState:
+                  pc.connectionState === 'connected' || pc.iceConnectionState === 'connected'
+                    ? 'connected'
+                    : pc.connectionState,
               },
             };
           });
@@ -473,7 +710,7 @@ export function LiveMonitorPanel({
           // ignore stats errors
         }
       }
-    }, 2000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, []);
@@ -511,6 +748,7 @@ export function LiveMonitorPanel({
       const resolution =
         settings.width && settings.height ? `${settings.width}x${settings.height}` : `${nextPreset.width}x${nextPreset.height}`;
 
+      localMetricsRef.current = { fps, resolution };
       setLocalMetrics({ fps, resolution });
       const { sessions: updated } = await api.startLiveSession(workspace.id, {
         activeTaskCode: selectedTaskCode || null,
@@ -519,6 +757,13 @@ export function LiveMonitorPanel({
         resolution,
       });
       onSessionsChange(updated);
+      realtimeClient.sendRtcSignal({
+        workspaceId: workspace.id,
+        fromUserId: currentUser.id,
+        toUserId: '*',
+        signalType: 'broadcaster-ready',
+        payload: { fps, resolution, presetId: nextId, updateOnly: true },
+      });
       onToast(
         'info',
         L(
@@ -580,6 +825,7 @@ export function LiveMonitorPanel({
       });
 
       localStreamRef.current = stream;
+      localMetricsRef.current = { fps, resolution };
       setLocalStream(stream);
       setLocalMetrics({ fps, resolution });
 
@@ -849,10 +1095,41 @@ export function LiveMonitorPanel({
                 </div>
 
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-300 tabular-nums">
+                  <span
+                    className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-300 tabular-nums"
+                    title={L(
+                      'FPS aktual menyesuaikan pergerakan layar IDE (VFR) hingga target FPS broadcaster.',
+                      'Actual FPS dynamically scales with IDE screen motion (VFR) up to the broadcaster target FPS.',
+                    )}
+                  >
                     <Wifi className="w-3 h-3" />
-                    {entry?.fps ? `${entry.fps} FPS` : `${session.fps || 30} FPS`}
-                    {entry?.kbps ? ` • ${entry.kbps} kbps` : ''}
+                    {entry && (entry.framesDecoded > 0 || entry.videoPlaying) ? (
+                      <>
+                        {(entry.resolution || entry.targetResolution) && (
+                          <span className="hidden sm:inline text-zinc-400">
+                            {entry.resolution || entry.targetResolution} •
+                          </span>
+                        )}
+                        <span>
+                          {entry.fps !== null
+                            ? entry.targetFps
+                              ? `${entry.fps}/${entry.targetFps} FPS`
+                              : `${entry.fps} FPS`
+                            : entry.targetFps
+                              ? `${entry.targetFps} FPS`
+                              : 'LIVE'}
+                        </span>
+                        {entry.kbps !== null && entry.kbps > 0 ? ` • ${entry.kbps} kbps` : ''}
+                      </>
+                    ) : entry?.targetFps ? (
+                      <span className="text-amber-300">
+                        {L(`Target ${entry.targetFps} FPS`, `Target ${entry.targetFps} FPS`)}
+                      </span>
+                    ) : (
+                      <span className="text-amber-300">
+                        {L('Menghubungkan...', 'Connecting...')}
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
@@ -876,32 +1153,53 @@ export function LiveMonitorPanel({
               </div>
 
               <div className="aspect-video bg-zinc-950 relative flex items-center justify-center">
-                {entry?.stream ? (
-                  <StreamVideo stream={entry.stream} muted />
-                ) : (
-                  <div className="text-center space-y-2.5 p-6">
-                    <Activity className="w-6 h-6 text-cyan-400 animate-pulse mx-auto" />
-                    <div className="text-xs text-zinc-300">
-                      {L(
-                        `Menegosiasikan koneksi WebRTC P2P dengan @${session.username}...`,
-                        `Negotiating WebRTC P2P connection with @${session.username}...`,
-                      )}
+                {entry?.stream && (
+                  <StreamVideo
+                    stream={entry.stream}
+                    muted
+                    onPlaying={() =>
+                      setRemoteStreams((prev) => {
+                        const cur = prev[session.userId];
+                        if (!cur || cur.videoPlaying) return prev;
+                        return {
+                          ...prev,
+                          [session.userId]: { ...cur, videoPlaying: true },
+                        };
+                      })
+                    }
+                  />
+                )}
+                {(!entry?.stream || (!entry.videoPlaying && entry.framesDecoded === 0)) && (
+                  <div className="absolute inset-0 bg-zinc-950/90 flex items-center justify-center text-center p-6">
+                    <div className="space-y-2.5">
+                      <Activity className="w-6 h-6 text-cyan-400 animate-pulse mx-auto" />
+                      <div className="text-xs text-zinc-300">
+                        {entry?.connectionState === 'failed'
+                          ? L(
+                              `Koneksi video P2P dengan @${session.username} terputus (NAT/firewall).`,
+                              `P2P video connection with @${session.username} failed (NAT/firewall).`,
+                            )
+                          : L(
+                              `Menegosiasikan stream video P2P dengan @${session.username}...`,
+                              `Negotiating WebRTC video stream with @${session.username}...`,
+                            )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          realtimeClient.sendRtcSignal({
+                            workspaceId: workspace.id,
+                            fromUserId: currentUser.id,
+                            toUserId: session.userId,
+                            signalType: 'viewer-join',
+                            payload: {},
+                          })
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 cursor-pointer"
+                      >
+                        {L('Ulangi Handshake', 'Retry Handshake')}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        realtimeClient.sendRtcSignal({
-                          workspaceId: workspace.id,
-                          fromUserId: currentUser.id,
-                          toUserId: session.userId,
-                          signalType: 'viewer-join',
-                          payload: {},
-                        })
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 cursor-pointer"
-                    >
-                      {L('Ulangi Handshake', 'Retry Handshake')}
-                    </button>
                   </div>
                 )}
               </div>
@@ -935,13 +1233,22 @@ export function LiveMonitorPanel({
   );
 }
 
-function StreamVideo({ stream, muted }: { stream: MediaStream; muted?: boolean }) {
+function StreamVideo({
+  stream,
+  muted,
+  onPlaying,
+}: {
+  stream: MediaStream;
+  muted?: boolean;
+  onPlaying?: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     el.srcObject = stream;
+    void el.play().catch(() => {});
   }, [stream]);
 
   return (
@@ -950,6 +1257,8 @@ function StreamVideo({ stream, muted }: { stream: MediaStream; muted?: boolean }
       autoPlay
       playsInline
       muted={muted}
+      onPlaying={onPlaying}
+      onLoadedData={onPlaying}
       className="w-full h-full object-contain bg-black"
     />
   );
