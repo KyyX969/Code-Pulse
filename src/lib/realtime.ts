@@ -1,5 +1,5 @@
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
-import type { RealtimeServerMessage } from '../../shared/types.ts';
+import type { RealtimeServerMessage, RtcSignalType } from '../../shared/types.ts';
 
 export type SocketConnectionState = 'disconnected' | 'connecting' | 'connected';
 
@@ -158,7 +158,7 @@ class RealtimeClient {
     workspaceId: string;
     fromUserId: string;
     toUserId: string;
-    signalType: 'offer' | 'answer' | 'ice-candidate' | 'viewer-join' | 'broadcaster-ready';
+    signalType: RtcSignalType;
     payload: unknown;
   }): void {
     const packet = {

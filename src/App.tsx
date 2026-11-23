@@ -1377,6 +1377,7 @@ export function App() {
 
                 {activeTab === 'live' && (
                   <LiveMonitorPanel
+                    key={activeWorkspace.id}
                     workspace={activeWorkspace}
                     tasks={tasks}
                     sessions={liveSessions}

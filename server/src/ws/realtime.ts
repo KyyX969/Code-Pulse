@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { RealtimeServerMessage } from '../../../shared/types.js';
+import type { RealtimeServerMessage, RtcSignalType } from '../../../shared/types.js';
 
 interface ClientMeta {
   clientId: string;
@@ -46,12 +46,7 @@ class RealtimeHub {
               workspaceId: msg.workspaceId,
               fromUserId,
               toUserId,
-              signalType: msg.signalType as
-                | 'offer'
-                | 'answer'
-                | 'ice-candidate'
-                | 'viewer-join'
-                | 'broadcaster-ready',
+              signalType: msg.signalType as RtcSignalType,
               payload: msg.payload,
             };
 

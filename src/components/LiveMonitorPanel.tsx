@@ -3,12 +3,13 @@ import {
   Activity,
   Gauge,
   Maximize2,
+  Mic,
+  MicOff,
   Minimize2,
   Monitor,
   MonitorOff,
   Radio,
   ShieldCheck,
-  Users,
   Wifi,
 } from 'lucide-react';
 import type {
@@ -22,6 +23,8 @@ import type {
 import { api } from '../lib/api.ts';
 import { useLanguage } from '../lib/i18nContext.ts';
 import { realtimeClient } from '../lib/realtime.ts';
+import { useTeamVoiceComs } from '../lib/useTeamVoiceComs.ts';
+import { TeamVoiceComsBar } from './TeamVoiceComsBar.tsx';
 
 type StreamPresetId = 'smooth_60' | 'crisp_30' | 'saver_720';
 
@@ -133,6 +136,13 @@ export function LiveMonitorPanel({
   const [focusedUserId, setFocusedUserId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
+  const voice = useTeamVoiceComs({
+    workspaceId: workspace.id,
+    currentUser,
+    iceServers,
+    onToast,
+  });
+
   const localStreamRef = useRef<MediaStream | null>(null);
   const presetRef = useRef<StreamPreset>(STREAM_PRESETS.smooth_60);
   const broadcasterPeersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -176,13 +186,20 @@ export function LiveMonitorPanel({
     setLocalStream(null);
     setLocalMetrics({});
     cleanupPeerMaps();
+    realtimeClient.sendRtcSignal({
+      workspaceId: workspace.id,
+      fromUserId: currentUser.id,
+      toUserId: '*',
+      signalType: 'broadcaster-stopped',
+      payload: {},
+    });
     try {
       const { sessions: updated } = await api.stopLiveSession(workspace.id);
       onSessionsChange(updated);
     } catch {
       // Ignore cleanup errors
     }
-  }, [cleanupPeerMaps, onSessionsChange, workspace.id]);
+  }, [cleanupPeerMaps, currentUser.id, onSessionsChange, workspace.id]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -260,6 +277,10 @@ export function LiveMonitorPanel({
       }
 
       if (msg.signalType === 'broadcaster-ready') {
+        void api
+          .listLiveSessions(workspace.id)
+          .then((res) => onSessionsChange(res.sessions))
+          .catch(() => {});
         realtimeClient.sendRtcSignal({
           workspaceId: workspace.id,
           fromUserId: currentUser.id,
@@ -267,6 +288,25 @@ export function LiveMonitorPanel({
           signalType: 'viewer-join',
           payload: {},
         });
+        return;
+      }
+
+      if (msg.signalType === 'broadcaster-stopped') {
+        const vp = viewerPeersRef.current.get(peerUserId);
+        if (vp) {
+          vp.close();
+          viewerPeersRef.current.delete(peerUserId);
+        }
+        setRemoteStreams((prev) => {
+          if (!prev[peerUserId]) return prev;
+          const copy = { ...prev };
+          delete copy[peerUserId];
+          return copy;
+        });
+        void api
+          .listLiveSessions(workspace.id)
+          .then((res) => onSessionsChange(res.sessions))
+          .catch(() => {});
         return;
       }
 
@@ -353,7 +393,7 @@ export function LiveMonitorPanel({
     });
 
     return unsubscribe;
-  }, [createBroadcasterOffer, currentUser.id, iceServers, workspace.id]);
+  }, [createBroadcasterOffer, currentUser.id, iceServers, onSessionsChange, workspace.id]);
 
   // Request WebRTC streams for active remote broadcasters
   useEffect(() => {
@@ -679,19 +719,26 @@ export function LiveMonitorPanel({
         </div>
       </div>
 
-      {/* Live WebRTC Info Bar */}
-      <div className="px-4 py-3 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center gap-2.5 text-xs text-indigo-200">
-        <Users className="w-4 h-4 text-indigo-400 shrink-0" />
-        <span>
-          <strong>{L('Berbagi IDE Peer-to-Peer:', 'Peer-to-Peer IDE Sharing:')}</strong>{' '}
-          {L('Klik ', 'Click ')}
-          <strong>{L('Mulai Sesi Langsung', 'Start Live Session')}</strong>{' '}
-          {L(
-            'untuk menyiarkan jendela IDE Anda ke rekan satu workspace secara real-time melalui Chrome WebRTC.',
-            'to broadcast your IDE window to workspace teammates in real time via Chrome WebRTC.',
-          )}
-        </span>
-      </div>
+      {/* Team Voice Coms Bar (WebRTC P2P Audio Mesh) */}
+      <TeamVoiceComsBar
+        currentUser={currentUser}
+        voiceJoined={voice.voiceJoined}
+        joiningVoice={voice.joiningVoice}
+        micMuted={voice.micMuted}
+        deafened={voice.deafened}
+        localSpeaking={voice.localSpeaking}
+        audioDevices={voice.audioDevices}
+        selectedDeviceId={voice.selectedDeviceId}
+        remoteParticipants={voice.remoteParticipants}
+        remoteAudioStreams={voice.remoteAudioStreams}
+        mutedPeerIds={voice.mutedPeerIds}
+        onJoinVoice={() => void voice.joinVoice()}
+        onLeaveVoice={() => voice.leaveVoice()}
+        onToggleMute={voice.toggleMute}
+        onToggleDeafen={voice.toggleDeafen}
+        onTogglePeerMute={voice.togglePeerMute}
+        onSwitchMicDevice={(id) => void voice.switchMicDevice(id)}
+      />
 
       {/* Live Video Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -706,6 +753,24 @@ export function LiveMonitorPanel({
                 <span className="text-xs font-semibold text-white truncate">
                   {L('Anda', 'You')} (@{currentUser.username})
                 </span>
+                {voice.voiceJoined && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      voice.micMuted
+                        ? 'bg-rose-500/15 text-rose-300'
+                        : voice.localSpeaking
+                          ? 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/50'
+                          : 'bg-emerald-500/15 text-emerald-300'
+                    }`}
+                  >
+                    {voice.micMuted ? (
+                      <MicOff className="w-2.5 h-2.5" />
+                    ) : (
+                      <Mic className="w-2.5 h-2.5" />
+                    )}
+                    <span>{voice.micMuted ? L('Mati', 'Muted') : 'Mic'}</span>
+                  </span>
+                )}
                 {selectedTaskCode && (
                   <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-[11px]">
                     #{selectedTaskCode}
@@ -730,6 +795,7 @@ export function LiveMonitorPanel({
         {remoteSessions.map((session) => {
           const entry = remoteStreams[session.userId];
           const isFocused = focusedUserId === session.userId;
+          const voicePeer = voice.remoteParticipants.find((p) => p.userId === session.userId);
 
           return (
             <div
@@ -749,6 +815,24 @@ export function LiveMonitorPanel({
                   <span className="text-xs font-semibold text-white truncate">
                     @{session.username}
                   </span>
+                  {voicePeer && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        voicePeer.muted
+                          ? 'bg-rose-500/15 text-rose-300'
+                          : voicePeer.speaking
+                            ? 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/50'
+                            : 'bg-emerald-500/15 text-emerald-300'
+                      }`}
+                    >
+                      {voicePeer.muted ? (
+                        <MicOff className="w-2.5 h-2.5" />
+                      ) : (
+                        <Mic className="w-2.5 h-2.5" />
+                      )}
+                      <span>{voicePeer.muted ? L('Mati', 'Muted') : 'Voice'}</span>
+                    </span>
+                  )}
                   {session.activeTaskCode && (
                     <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-[11px]">
                       #{session.activeTaskCode}

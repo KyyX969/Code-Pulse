@@ -238,6 +238,22 @@ export interface WorkspaceInvitation {
   respondedAt: string | null;
 }
 
+export type RtcSignalType =
+  | 'offer'
+  | 'answer'
+  | 'ice-candidate'
+  | 'viewer-join'
+  | 'broadcaster-ready'
+  | 'broadcaster-stopped'
+  | 'voice-probe'
+  | 'voice-join'
+  | 'voice-presence'
+  | 'voice-leave'
+  | 'voice-mute'
+  | 'voice-offer'
+  | 'voice-answer'
+  | 'voice-ice';
+
 export type RealtimeServerMessage =
   | { type: 'connected'; clientId: string }
   | { type: 'task:created'; workspaceId: string; task: Task }
@@ -253,7 +269,7 @@ export type RealtimeServerMessage =
       workspaceId: string;
       fromUserId: string;
       toUserId: string;
-      signalType: 'offer' | 'answer' | 'ice-candidate' | 'viewer-join' | 'broadcaster-ready';
+      signalType: RtcSignalType;
       payload: unknown;
     };
 
